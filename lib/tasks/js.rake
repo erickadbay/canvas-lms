@@ -325,14 +325,14 @@ namespace :js do
     end
     puts "--> Concatenated JavaScript bundles in #{optimize_time}"
 
-    unless ENV["JS_BUILD_NO_UGLIFY"]
-      puts "--> Compressing JavaScript with UglifyJS"
-      optimize_time = Benchmark.realtime do
-        output = `npm run compress 2>&1`
-        raise "Error running js:build: \n#{output}\nABORTING" if $?.exitstatus != 0
-      end
-      puts "--> Compressed JavaScript in #{optimize_time}"
-    end
+    # unless ENV["JS_BUILD_NO_UGLIFY"]
+    #   puts "--> Compressing JavaScript with UglifyJS"
+    #   optimize_time = Benchmark.realtime do
+    #     output = `npm run compress 2>&1`
+    #     raise "Error running js:build: \n#{output}\nABORTING" if $?.exitstatus != 0
+    #   end
+    #   puts "--> Compressed JavaScript in #{optimize_time}"
+    # end
   end
 
   desc "Compile React JSX to JS"

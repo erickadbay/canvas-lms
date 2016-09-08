@@ -163,11 +163,11 @@ namespace :canvas do
       }
     end
 
-    if generate_documentation
-      tasks["Generate documentation [yardoc]"] = -> {
-        Rake::Task['doc:api'].invoke
-      }
-    end
+    # if generate_documentation
+    #   tasks["Generate documentation [yardoc]"] = -> {
+    #     Rake::Task['doc:api'].invoke
+    #   }
+    # end
 
     times = nil
     real_time = Benchmark.realtime do
