@@ -1111,7 +1111,7 @@ DEPENDENCIES
   yard-appendix (>= 0.1.8)
 
 RUBY VERSION
-   ruby 2.2.6p396
+   ruby 2.3.2p217
 
 BUNDLED WITH
    1.13.6
