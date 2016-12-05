@@ -109,9 +109,11 @@ class BigBlueButtonConference < WebConference
   end
 
   def recordings
-    fetch_recordings.map do |recording|
+    ## Here we format each recording to the way we want
+    recordings = fetch_recordings.map! do |recording|
       recording_formats = recording.fetch(:playback, {})
       recordingObj = {
+        meeting_name:       recording[:name],
         recording_id:       recording[:recordID],
         recording_vendor:   "big_blue_button",
         published:          recording[:published]=="true" ? true : false,
@@ -119,8 +121,10 @@ class BigBlueButtonConference < WebConference
         ended_at:           recording[:endTime].to_i,
         duration_minutes:   recording_formats.first[:length].to_i,
         recording_formats:  [],
-        images:             []
+        images:             [],
+        parent_id:          recording[:parentRecordID] ? recording[:parentRecordID] : nil
       }
+      recordingObj[:breakout_recordings] = [] unless recordingObj[:parent_id]
       recording_formats.each do |recording_format|
         recordingObj[:recording_formats] << {
           type:             recording_format[:type].capitalize,
@@ -132,6 +136,21 @@ class BigBlueButtonConference < WebConference
       end
       recordingObj
     end
+
+    ## We bundle up each recording with their respective child recordings
+    recordings.each do |recording|
+      if recording[:parent_id]
+        parent_recording = recordings.find{ |r| r[:recording_id] == recording[:parent_id] }
+        if parent_recording
+          parent_recording[:breakout_recordings] << recording
+        else
+          # TODO Parent recording doesnt exist, do something
+        end
+      end
+    end
+
+    ## Here we delete all child recordings from the list, if there's any
+    recordings.delete_if{ |r| r[:parent_id] }
   end
 
   def delete_all_recordings

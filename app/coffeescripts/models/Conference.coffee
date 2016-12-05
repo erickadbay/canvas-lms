@@ -14,8 +14,10 @@ define [
 
     recordings_data: ->
       recording: @get('recordings')[0]
-      recordingCount: @get('recordings').length
-      multipleRecordings: @get('recordings').length > 1
+      # recordingCount: @get('recordings').length
+      # multipleRecordings: @get('recordings').length > 1
+      recordingCount: if @get('recordings').length > 0 && @get('recordings')[0].breakout_recordings then @get('recordings').length + @get('recordings')[0].breakout_recordings.length else @get('recordings').length
+      multipleRecordings: if @get('recordings').length > 0 && @get('recordings')[0].breakout_recordings then (@get('recordings').length + @get('recordings')[0].breakout_recordings.length)>1 else @get('recordings').length>1
 
     permissions_data: ->
       has_actions: @get('permissions')['update'] || @get('permissions')['delete']

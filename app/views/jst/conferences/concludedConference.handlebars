@@ -115,6 +115,74 @@
                     </div>
                   {{/ifEqual}}
                 {{/if}}
+                <div style="padding-left: 20px;">
+                  {{#each breakout_recordings}}
+                    <div class="ig-row__layout" style="padding-top: 5px;">
+                      <div class="ig-info">
+                          <a class="ig-title element_toggler"
+                              href="#"
+                              aria-controls="recording-{{recording_id}}"
+                              aria-expanded="false"
+                              role="button">
+                            <i class="icon-mini-arrow-right auto_rotate"></i>
+                            {{meeting_name}}
+                          </a>
+                      </div>
+                    </div>
+                    <div id="recording-{{recording_id}}" style="display: none;padding-bottom: 5px;">
+                      <div class="ig-row__layout">
+                        <div class="ig-info">
+                          <div class="ig-details">
+                            {{#each recording_formats}}
+                              <a href="{{#if ../../published}} {{playback_url}} {{/if}}" target="{{#if ../../published}} _blank {{/if}}"
+                                class="ig-title" data-id="{{../recording_id}}" style="line-height: inherit;">
+                                {{type}}
+                              </a>
+                            {{/each}}
+                            {{dateString ended_at}}
+                            &#124;&nbsp;
+                            {{durationToString duration_minutes}}
+                          </div>
+                        </div>
+                        {{#if ../../../../permissions.delete}}
+                          <div class="ig-button" data-id="{{ recording_id }}">
+                            {{#ifNull ../protected}}
+                            {{else}}
+                              <a href="{{../../../../url}}" class="btn btn-small {{#if ../protected}}icon-unlock unprotect_recording_link{{else}}icon-lock protect_recording_link{{/if}}">
+                                {{#ifEqual ../protected true}}
+                                  {{#t 'unprotect'}}Unprotect{{/t}}
+                                {{else}}
+                                  {{#t 'protect'}}Protect{{/t}}
+                                {{/ifEqual}}
+                              </a>
+                            {{/ifNull}}
+                            <a href="{{../../../../url}}" class="btn btn-small {{#if ../published}}icon-unpublish unpublish_recording_link{{else}}icon-publish publish_recording_link{{/if}}">
+                                {{#if ../published}}
+                                  {{#t 'unpublish'}}Unpublish{{/t}}
+                                {{else}}
+                                  {{#t 'publish'}}Publish{{/t}}
+                                {{/if}}
+                            </a>
+                            <a href="{{../../../../url}}" class="btn btn-small icon-trash delete_recording_link">
+                              {{#t "delete"}}Delete{{/t}}
+                            </a>
+                          </div>
+                        {{/if}}
+                      </div>
+                      {{#if ../published}}
+                        {{#ifEqual images.length 0}}
+                        {{else}}
+                          <div class="recording-thumbnails" data-id="{{ recording_id }}">
+                            {{#each images}}
+                              <a href="{{thumbnail_url}}" target="_blank"><img src="{{thumbnail_url}}" alt="{{title}}" class="recording-thumbnail" /></a>
+                              <img src="{{thumbnail_url}}" class="large-thumbnail" />
+                            {{/each}}
+                          </div>
+                        {{/ifEqual}}
+                      {{/if}}
+                    </div>
+                  {{/each}}
+                </div>
               </div>
             {{/ifEqual}}
           {{else}}
