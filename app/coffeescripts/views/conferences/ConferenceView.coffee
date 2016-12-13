@@ -203,14 +203,14 @@ define [
       img = parent.find('img.loader')
       elem =  if published == "true"
                 class: 'btn btn-small publish icon-publish'
-                text: 'Published'
+                text: I18n.t('conferences.recordings.published', 'Published')
                 publish: 'true'
               else
                 class: 'btn btn-small publish icon-unpublish'
-                text: 'Unpublished'
+                text: I18n.t('conferences.recordings.unpublished', 'Unpublished')
                 publish: 'false'
       img.hide()
-      $('<a class="'+elem.class+'" data-publish="'+elem.publish+'">'+I18n.t(elem.text)+'</a>').insertAfter(img)
+      $('<a class="'+elem.class+'" data-publish="'+elem.publish+'">'+elem.text+'</a>').insertAfter(img)
 
     toggleRecordingLink: (data, parent) ->
       thumbnails = $('.recording-thumbnails[data-id="' + parent.data("id") + '"]')
