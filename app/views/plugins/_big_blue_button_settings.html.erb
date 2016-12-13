@@ -32,7 +32,11 @@
       <td></td>
       <td>
         &nbsp;&nbsp;&nbsp;&nbsp;
+<<<<<<< HEAD
         <%= f.select :recording_options, options_for_select(BigBlueButtonConference::RECORDING_OPTIONS.map{ |k,v| [v, k] }, :selected => WebConference.config(BigBlueButtonConference.to_s) ? WebConference.config(BigBlueButtonConference.to_s)[:recording_options][:value] : '1' ), :id => "recording_options" %>
+=======
+        <%= f.select :recording_options, options_for_select(BigBlueButtonConference::RECORDING_OPTIONS.map{ |k,v| [v, k] }, :selected => WebConference.config(BigBlueButtonConference.to_s) && WebConference.config(BigBlueButtonConference.to_s)[:recording_options] ? WebConference.config(BigBlueButtonConference.to_s)[:recording_options][:value] : '1' ), :id => "recording_options" %>
+>>>>>>> upstream/bigbluebutton
       </td>
     </tr>
     <tr id="recording_option_enabled" style="display:none;">

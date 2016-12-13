@@ -30,6 +30,12 @@ class BigBlueButtonConference < WebConference
     3 => 'Record everything'
   }
 
+  RECORDING_OPTIONS = {
+    1 => 'Show record option',
+    2 => 'Hide record option (true by default)',
+    3 => 'Record everything'
+  }
+
   user_setting_field :record, {
     name: ->{ t('recording_setting', 'Recording') },
     description: ->{ t('recording_setting_enabled_description', 'Enable recording for this conference') },

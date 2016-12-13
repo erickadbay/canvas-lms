@@ -150,6 +150,10 @@ CanvasRails::Application.routes.draw do
       post :publish_recording
       post :delete_recording
       post :protect_recording
+<<<<<<< HEAD
+=======
+      get :logout
+>>>>>>> upstream/bigbluebutton
     end
   end
 
