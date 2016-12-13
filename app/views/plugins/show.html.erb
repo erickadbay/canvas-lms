@@ -1,9 +1,9 @@
 <% content_for :page_title do %><%= join_title t(:page_title, "Plugin Settings"), @plugin.name %><% end %>
-<% 
+<%
   js_bundle :plugins
   add_crumb(t('#crumbs.plugins', "Plugins"), plugins_path)
   add_crumb(@plugin.name)
-%>  
+%>
 
 <h2><%= join_title t(:page_title, "Plugin Settings"), @plugin.name %></h2>
 
