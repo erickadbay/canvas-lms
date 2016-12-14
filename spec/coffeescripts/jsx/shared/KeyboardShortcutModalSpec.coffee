@@ -2,9 +2,9 @@ define [
   'jquery'
   'jsx/shared/KeyboardShortcutModal'
   'react'
-], ($, KeyboardShortcutModal, React) ->
-
-  TestUtils = React.addons.TestUtils
+  'react-dom'
+  'react-addons-test-utils'
+], ($, KeyboardShortcutModal, React, ReactDOM, TestUtils) ->
 
   module 'KeyboardShortcutModal#handleKeydown',
     setup: ->
@@ -13,7 +13,7 @@ define [
       @component = TestUtils.renderIntoDocument(KeyboardShortcutModalElement)
 
     teardown: ->
-      React.unmountComponentAtNode(@component.getDOMNode().parentNode)
+      ReactDOM.unmountComponentAtNode(@component.getDOMNode().parentNode)
       $('#fixtures').empty()
 
   test  'appears when comma key is pressed', ->
@@ -36,7 +36,7 @@ define [
       $('#fixtures').append('<div id="application" />')
 
     teardown: ->
-      React.unmountComponentAtNode(@component.getDOMNode().parentNode)
+      ReactDOM.unmountComponentAtNode(@component.getDOMNode().parentNode)
       $('#fixtures').empty()
 
   test 'renders shortcuts prop', ->

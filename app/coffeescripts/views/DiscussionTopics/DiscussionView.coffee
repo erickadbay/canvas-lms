@@ -3,11 +3,13 @@ define [
   'jquery'
   'underscore'
   'Backbone'
+  'jsx/shared/conditional_release/CyoeHelper'
   'jst/DiscussionTopics/discussion'
   'compiled/views/PublishIconView'
   'compiled/views/ToggleableSubscriptionIconView'
+  'compiled/views/assignments/DateDueColumnView'
   'compiled/views/MoveDialogView'
-], (I18n, $, _, {View}, template, PublishIconView, ToggleableSubscriptionIconView, MoveDialogView) ->
+], (I18n, $, _, {View}, CyoeHelper, template, PublishIconView, ToggleableSubscriptionIconView, DateDueColumnView, MoveDialogView) ->
 
   class DiscussionView extends View
     # Public: View template (discussion).
@@ -54,10 +56,14 @@ define [
 
     @child 'toggleableSubscriptionIcon', '[data-view=toggleableSubscriptionIcon]'
 
+    @child 'dateDueColumnView', '[data-view=date-due]'
+
     initialize: (options) ->
       @attachModel()
       options.publishIcon = new PublishIconView(model: @model) if ENV.permissions.publish
       options.toggleableSubscriptionIcon = new ToggleableSubscriptionIconView(model: @model)
+      if @model.get('assignment')
+        options.dateDueColumnView = new DateDueColumnView(model: @model.get('assignment'))
       @moveItemView = new MoveDialogView
         model: @model
         nested: true
@@ -163,7 +169,9 @@ define [
       base.discussion_topic_menu_tools = ENV.discussion_topic_menu_tools
       _.each base.discussion_topic_menu_tools, (tool) =>
         tool.url = tool.base_url + "&discussion_topics[]=#{@model.get("id")}"
-      base.showMasteryPaths = ENV.CONDITIONAL_RELEASE_SERVICE_ENABLED && base.assignment_id
+
+      base.cyoe = CyoeHelper.getItemData(base.assignment_id)
+      base.return_to = encodeURIComponent window.location.pathname
       base
 
     # Internal: Re-render for publish state change preserving focus

@@ -54,7 +54,7 @@ class User < ActiveRecord::Base
   has_many :observer_enrollments
   has_many :observee_enrollments, :foreign_key => :associated_user_id, :class_name => 'ObserverEnrollment'
   has_many :user_observers, dependent: :destroy, inverse_of: :user
-  has_many :observers, :through => :user_observers, :class_name => 'User'
+  has_many :observers, -> { where("user_observers.workflow_state <> 'deleted'") }, :through => :user_observers, :class_name => 'User'
   has_many :user_observees,
            class_name: 'UserObserver',
            foreign_key: :observer_id,
@@ -63,7 +63,7 @@ class User < ActiveRecord::Base
   has_many :observed_users, :through => :user_observees, :source => :user
   has_many :all_courses, :source => :course, :through => :enrollments
   has_many :group_memberships, -> { preload(:group) }, dependent: :destroy
-  has_many :groups, :through => :group_memberships
+  has_many :groups, -> { where("group_memberships.workflow_state<>'deleted'") }, :through => :group_memberships
   has_many :polls, class_name: 'Polling::Poll'
 
   has_many :current_group_memberships, -> { eager_load(:group).where("group_memberships.workflow_state = 'accepted' AND groups.workflow_state<>'deleted'") }, class_name: 'GroupMembership'
@@ -751,7 +751,7 @@ class User < ActiveRecord::Base
   end
 
   def email
-    # if you change this cache_key, change it in email_cached? as well
+    # if you change this cache_key, change it in email_cached? as well (and email=)
     value = Rails.cache.fetch(['user_email', self].cache_key) do
       email_channel.try(:path) || :none
     end
@@ -801,6 +801,7 @@ class User < ActiveRecord::Base
     cc.move_to_top
     cc.save!
     self.reload
+    Rails.cache.delete(['user_email', self].cache_key)
     cc.path
   end
 
@@ -1360,6 +1361,10 @@ class User < ActiveRecord::Base
     preferences[:custom_colors] ||= {}
   end
 
+  def course_positions
+    preferences[:course_positions] ||= {}
+  end
+
   def course_nicknames
     preferences[:course_nicknames] ||= {}
   end
@@ -1696,7 +1701,7 @@ class User < ActiveRecord::Base
               where("enrollment_states.state IN ('active', 'invited', 'pending_invited', 'pending_active')")
           end
 
-          scope.select("courses.*, enrollments.id AS primary_enrollment_id, enrollments.type AS primary_enrollment_type, enrollments.role_id AS primary_enrollment_role_id, #{Enrollment.type_rank_sql} AS primary_enrollment_rank, enrollments.workflow_state AS primary_enrollment_state").
+          scope.select("courses.*, enrollments.id AS primary_enrollment_id, enrollments.type AS primary_enrollment_type, enrollments.role_id AS primary_enrollment_role_id, #{Enrollment.type_rank_sql} AS primary_enrollment_rank, enrollments.workflow_state AS primary_enrollment_state, enrollments.created_at AS primary_enrollment_date").
               order("courses.id, #{Enrollment.type_rank_sql}, #{Enrollment.state_rank_sql}").
               distinct_on(:id).shard(shards).to_a
         end
@@ -1705,7 +1710,7 @@ class User < ActiveRecord::Base
 
       if association == :current_and_invited_courses
         if enrollment_uuid && pending_course = Course.
-          select("courses.*, enrollments.type AS primary_enrollment, #{Enrollment.type_rank_sql} AS primary_enrollment_rank, enrollments.workflow_state AS primary_enrollment_state").
+          select("courses.*, enrollments.type AS primary_enrollment, #{Enrollment.type_rank_sql} AS primary_enrollment_rank, enrollments.workflow_state AS primary_enrollment_state, enrollments.created_at AS primary_enrollment_date").
           joins(:enrollments).
           where(:enrollments => { :uuid => enrollment_uuid, :workflow_state => 'invited' }).first
           res << pending_course
@@ -1720,6 +1725,7 @@ class User < ActiveRecord::Base
             c.primary_enrollment_role_id = e.role_id
             c.primary_enrollment_rank = e.rank_sortable
             c.primary_enrollment_state = e.workflow_state
+            c.primary_enrollment_date = e.created_at
             c.invitation = e.uuid
             c
           end)
@@ -1813,7 +1819,8 @@ class User < ActiveRecord::Base
   def participating_student_course_ids
     @participating_student_course_ids ||= self.shard.activate do
       Rails.cache.fetch([self, 'participating_student_course_ids', ApplicationController.region].cache_key) do
-        self.enrollments.shard(in_region_associated_shards).of_student_type.current.active_by_date.distinct.pluck(:course_id)
+        self.enrollments.shard(in_region_associated_shards).where(:type => %w{StudentEnrollment StudentViewEnrollment}).
+          current.active_by_date.distinct.pluck(:course_id)
       end
     end
   end
@@ -2183,7 +2190,7 @@ class User < ActiveRecord::Base
 
       group_rows = convert_global_id_rows(
           GroupMembership.joins(:group).
-              merge(User.instance_exec(&User.reflections[CANVAS_RAILS4_0 ? :current_group_memberships : 'current_group_memberships'].scope).only(:where)).
+              merge(User.instance_exec(&User.reflections['current_group_memberships'].scope).only(:where)).
               where(user_id: users).
               distinct.pluck(:user_id, :group_id))
       group_rows.each do |user_id, group_id|
@@ -2295,7 +2302,7 @@ class User < ActiveRecord::Base
 
   def roles(root_account)
     return @roles if @roles
-    @roles = Rails.cache.fetch(['user_roles_for_root_account2', self, root_account].cache_key) do
+    @roles = Rails.cache.fetch(['user_roles_for_root_account3', self, root_account].cache_key) do
       roles = ['user']
 
       enrollment_types = root_account.all_enrollments.where(user_id: self, workflow_state: 'active').uniq.pluck(:type)
@@ -2310,10 +2317,6 @@ class User < ActiveRecord::Base
       end
       roles
     end
-  end
-
-  def admin_of_root_account?(root_account)
-    root_account.all_account_users_for(self).any?
   end
 
   def eportfolios_enabled?
@@ -2483,7 +2486,10 @@ class User < ActiveRecord::Base
     if favorites.length > 0
       @menu_courses = favorites
     else
-      @menu_courses = self.courses_with_primary_enrollment(:current_and_invited_courses, enrollment_uuid).first(12)
+      # this terribleness is so we try to make sure that the newest courses show up in the menu
+      @menu_courses = self.courses_with_primary_enrollment(:current_and_invited_courses, enrollment_uuid).
+        sort_by{ |c| [c.primary_enrollment_rank, Time.now - (c.primary_enrollment_date || Time.now)] }.first(12).
+        sort_by{ |c| [c.primary_enrollment_rank, Canvas::ICU.collation_key(c.name)] }
     end
     ActiveRecord::Associations::Preloader.new.preload(@menu_courses, :enrollment_term)
     @menu_courses

@@ -55,6 +55,7 @@ SafeYAML::OPTIONS.merge!(
         !float#exp
         !float#inf
         !str
+        tag:yaml.org,2002:str
         !timestamp
         !timestamp#iso8601
         !timestamp#spaced
@@ -64,6 +65,7 @@ SafeYAML::OPTIONS.merge!(
         !ruby/hash:HashWithIndifferentAccess
         !ruby/hash:ActiveSupport::HashWithIndifferentAccess
         !ruby/hash:WeakParameters
+        !ruby/hash:ActionController::Parameters
         !ruby/object:Class
         !ruby/object:OpenStruct
         !ruby/object:Scribd::Document

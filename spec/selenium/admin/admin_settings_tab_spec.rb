@@ -378,7 +378,7 @@ describe "admin settings tab" do
 
       help_links = Account.default.help_links
       expect(help_links).to include(help_link.merge(:type => "custom"))
-      expect(help_links & Canvas::Help.default_links).to eq Canvas::Help.default_links
+      expect(help_links & Account::HelpLinks.default_links).to eq Account::HelpLinks.default_links
 
       Setting.set('show_feedback_link', 'true')
       get "/accounts/#{Account.default.id}/settings"
@@ -390,8 +390,8 @@ describe "admin settings tab" do
       click_submit
 
       new_help_links = Account.default.help_links
-      expect(new_help_links).to_not include(Canvas::Help.default_links.first)
-      expect(new_help_links).to include(Canvas::Help.default_links.last)
+      expect(new_help_links).to_not include(Account::HelpLinks.default_links.first)
+      expect(new_help_links).to include(Account::HelpLinks.default_links.last)
       expect(new_help_links).to include(help_link.merge(:type => "custom"))
     end
   end
@@ -462,30 +462,5 @@ describe "admin settings tab" do
     Feature.applicable_features(Account.site_admin).each do |feature|
       expect(f(".feature.#{feature.feature}")).to be_displayed
     end
-  end
-
-  it "should test SIS Agent Token Authentication", priority: "2", test_id: 132577 do
-    course_with_admin_logged_in(:account => Account.site_admin)
-    sis_token = "canvas"
-    go_to_feature_options(Account.site_admin.id)
-    move_to_click("label[for=ff_allowed_post_grades]")
-    go_to_feature_options(Account.default.id)
-    move_to_click("label[for=ff_allowed_post_grades]")
-    f("#tab-settings-link").click
-    # SIS Agent Token Authentication will not appear without refresh
-    refresh_page
-    expect(f("#add_sis_app_token")).to be_displayed
-    expect(f("#account_settings_sis_app_token")).to be_displayed
-    f("#account_settings_sis_app_token").send_keys(sis_token)
-    f(".Button--primary").click
-    token = f("#account_settings_sis_app_token")
-    keep_trying_until{
-      expect(token.attribute("value")).to eq sis_token
-    }
-    go_to_feature_options(Account.default.id)
-    move_to_click("label[for=ff_off_post_grades]")
-    f('#tab-settings-link').click
-    refresh_page
-    expect(f("#account_settings")).not_to contain_css("#account_settings_sis_app_token")
   end
 end

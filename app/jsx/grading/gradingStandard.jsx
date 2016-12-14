@@ -1,13 +1,14 @@
 define([
   'react',
+  'react-dom',
+  'react-addons-update',
   'jsx/grading/dataRow',
   'jquery',
   'i18n!external_tools',
   'underscore',
   'compiled/str/splitAssetString'
 ],
-function(React, DataRow, $, I18n, _, splitAssetString) {
-  var update = React.addons.update;
+function(React, ReactDOM , update, DataRow, $, I18n, _, splitAssetString) {
   var GradingStandard = React.createClass({
 
     getInitialState: function() {
@@ -27,12 +28,12 @@ function(React, DataRow, $, I18n, _, splitAssetString) {
     },
 
     componentDidMount: function() {
-      if(this.props.justAdded) React.findDOMNode(this.refs.title).focus();
+      if(this.props.justAdded) ReactDOM.findDOMNode(this.refs.title).focus();
     },
 
     componentDidUpdate: function(prevProps, prevState) {
       if(this.props.editing !== prevProps.editing){
-        React.findDOMNode(this.refs.title).focus();
+        ReactDOM.findDOMNode(this.refs.title).focus();
         this.setState({editingStandard: $.extend(true, {}, this.props.standard)})
       }
     },
@@ -56,7 +57,7 @@ function(React, DataRow, $, I18n, _, splitAssetString) {
         });
       }else{
         this.setState({showAlert: true}, function() {
-          React.findDOMNode(this.refs.invalidStandardAlert).focus();
+          ReactDOM.findDOMNode(this.refs.invalidStandardAlert).focus();
         });
       }
     },
@@ -102,7 +103,7 @@ function(React, DataRow, $, I18n, _, splitAssetString) {
 
     hideAlert: function() {
       this.setState({showAlert: false}, function(){
-        React.findDOMNode(this.refs.title).focus();
+        ReactDOM.findDOMNode(this.refs.title).focus();
       });
     },
 

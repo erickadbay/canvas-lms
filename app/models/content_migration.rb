@@ -251,6 +251,13 @@ class ContentMigration < ActiveRecord::Base
     add_issue(user_message, :warning, opts)
   end
 
+  def add_unique_warning(key, warning, opts={})
+    @added_warnings ||= Set.new
+    return if @added_warnings.include?(key) # only add it once
+    @added_warnings << key
+    add_warning(warning, opts)
+  end
+
   def add_import_warning(item_type, item_name, warning)
     item_name = CanvasTextHelper.truncate_text(item_name || "", :max_length => 150)
     add_warning(t('errors.import_error', "Import Error:") + " #{item_type} - \"#{item_name}\"", warning)
@@ -319,6 +326,8 @@ class ContentMigration < ActiveRecord::Base
     return if blocked_by_current_migration?(plugin, retry_count, expires_at)
 
     set_default_settings
+    self.save if self.changed?
+
     plugin ||= Canvas::Plugin.find(migration_type)
     if plugin
       queue_opts = {:priority => Delayed::LOW_PRIORITY, :max_attempts => 1,
@@ -757,8 +766,9 @@ class ContentMigration < ActiveRecord::Base
     @imported_migration_items_hash.values.map(&:values).flatten
   end
 
-  def imported_migration_items_hash(klass)
+  def imported_migration_items_hash(klass=nil)
     @imported_migration_items_hash ||= {}
+    return @imported_migration_items_hash unless klass
     @imported_migration_items_hash[klass.name] ||= {}
   end
 

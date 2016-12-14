@@ -3,11 +3,13 @@ define([
   'react',
   'react-modal',
   'jsx/due_dates/OverrideStudentStore',
-  'bower/react-tokeninput/dist/react-tokeninput',
+  'compiled/models/AssignmentOverride',
+  'react-tokeninput',
   'i18n!assignments',
   'jquery',
-  'jsx/shared/helpers/searchHelpers'
-], (_ ,React, ReactModal, OverrideStudentStore, TokenInput, I18n, $, SearchHelpers) => {
+  'jsx/shared/helpers/searchHelpers',
+  'jsx/due_dates/DisabledTokenInput'
+], (_ ,React, ReactModal, OverrideStudentStore, Override, TokenInput, I18n, $, SearchHelpers, DisabledTokenInput) => {
 
   var ComboboxOption = TokenInput.Option;
   TokenInput = TokenInput.default;
@@ -30,7 +32,8 @@ define([
       rowKey: React.PropTypes.string.isRequired,
       defaultSectionNamer: React.PropTypes.func.isRequired,
       currentlySearching: React.PropTypes.bool.isRequired,
-      allStudentsFetched: React.PropTypes.bool.isRequired
+      allStudentsFetched: React.PropTypes.bool.isRequired,
+      disabled: React.PropTypes.bool.isRequired
     },
 
     MINIMUM_SEARCH_LENGTH: DueDateWrapperConsts.MINIMUM_SEARCH_LENGTH,
@@ -61,6 +64,8 @@ define([
     // -------------------
 
     handleInput(userInput) {
+      if (this.props.disabled) return;
+
       this.setState(
         { userInput: userInput, currentlyTyping: true },function(){
           if (this.safetiesOff) {
@@ -87,14 +92,20 @@ define([
       }
     },
 
-    handleTokenAdd(value) {
-      var token = this.findMatchingOption(value)
+    handleTokenAdd(value, option) {
+      if (this.props.disabled) return;
+
+      var token = this.findMatchingOption(value, option)
       this.props.handleTokenAdd(token)
       this.clearUserInput()
     },
 
-    handleTokenRemove(value) {
-      var token = this.findMatchingOption(value)
+    overrideTokenAriaLabel(tokenName) {
+      return I18n.t('Currently assigned to %{tokenName}, click to remove', {tokenName: tokenName});
+    },
+
+    handleTokenRemove(token) {
+      if (this.props.disabled) return;
       this.props.handleTokenRemove(token)
     },
 
@@ -113,9 +124,14 @@ define([
     //      Helpers
     // -------------------
 
-    findMatchingOption(userInput){
-      if(typeof userInput !== 'string') { return userInput }
-      return this.findBestMatch(userInput)
+    findMatchingOption(name, option){
+      if(option){
+        // Selection was made from dropdown, find by unique attributes
+        return _.findWhere(this.props.potentialOptions, option.props.set_props)
+      } else {
+        // Search for best matching name
+        return this.sortedMatches(name)[0]
+      }
     },
 
     sortedMatches(userInput){
@@ -127,12 +143,6 @@ define([
       return _.union(
         optsByMatch.exact, optsByMatch.start, optsByMatch.substring
       );
-    },
-
-    findBestMatch(userInput){
-      return _.find(this.props.potentialOptions, (item) => SearchHelpers.exactMatchRegex(userInput).test(item.name)) ||
-      _.find(this.props.potentialOptions, (item) => SearchHelpers.startOfStringRegex(userInput).test(item.name)) ||
-      _.find(this.props.potentialOptions, (item) => SearchHelpers.substringMatchRegex(userInput).test(item.name))
     },
 
     filteredTags() {
@@ -149,8 +159,12 @@ define([
       return _.groupBy(options, (opt) => {
         if (opt["course_section_id"]) {
           return "course_section"
+        } else if (opt["group_id"]) {
+          return "group"
+        } else if (opt["noop_id"]){
+          return "noop"
         } else {
-          return !!opt["group_id"] ? "group" : "student"
+          return "student"
         }
       })
     },
@@ -181,12 +195,12 @@ define([
       var options = this.promptText() ?
         _.union([this.promptOption()], this.optionsForAllTypes()) :
         this.optionsForAllTypes()
-
       return options
     },
 
     optionsForAllTypes(){
       return _.union(
+        this.conditionalReleaseOptions(),
         this.sectionOptions(),
         this.groupOptions(),
         this.studentOptions()
@@ -205,19 +219,27 @@ define([
       return this.optionsForType("course_section")
     },
 
+    conditionalReleaseOptions(){
+      if (!ENV.CONDITIONAL_RELEASE_SERVICE_ENABLED) return []
+
+      var selectable = _.contains(this.filteredTagsForType('noop'), Override.conditionalRelease)
+      return selectable ? [this.headerOption("conditional_release", Override.conditionalRelease)] : []
+    },
+
     optionsForType(optionType){
       var header = this.headerOption(optionType)
       var options = this.selectableOptions(optionType)
       return _.any(options) ? _.union([header], options) : []
     },
 
-    headerOption(heading){
+    headerOption(heading, set){
       var headerText = {
         "student": I18n.t("Student"),
         "course_section": I18n.t("Course Section"),
         "group": I18n.t("Group"),
+        "conditional_release": I18n.t("Mastery Paths"),
       }[heading]
-      return <ComboboxOption className="ic-tokeninput-header" value={heading} key={heading}>
+      return <ComboboxOption className="ic-tokeninput-header" value={heading} key={heading} set_props={set}>
                {headerText}
              </ComboboxOption>
     },
@@ -231,13 +253,13 @@ define([
 
       return _.chain(this.filteredTagsForType(type))
         .take(numberToShow)
-        .map((set) => this.selectableOption(set))
+        .map((set, index) => this.selectableOption(set, index))
         .value()
     },
 
-    selectableOption(set){
+    selectableOption(set, index){
       var displayName = set.name || this.props.defaultSectionNamer(set.course_section_id)
-      return <ComboboxOption key={set.key} value={set.name}>
+      return <ComboboxOption key={set.key || `${displayName}-${index}`} value={set.name} set_props={set}>
                {displayName}
              </ComboboxOption>
     },
@@ -288,6 +310,37 @@ define([
       return hidingSections || hidingStudents || hidingGroups
     },
 
+    renderTokenInput() {
+      if (this.props.disabled) {
+        return <DisabledTokenInput tokens={_.pluck(this.props.tokens, "name")} ref="DisabledTokenInput"/>;
+      }
+      const ariaLabel = I18n.t(
+        'Add students by searching by name, course section or group.' +
+        ' After entering text, navigate results by using the down arrow key.' +
+        ' Select a result by using the Enter key.'
+      );
+      return (
+        <div>
+          <div id="ic-tokeninput-description"
+               className = "screenreader-only">
+            { I18n.t('Use this list to remove assigned students. Add new students with combo box after list.') }
+          </div>
+          <TokenInput
+            menuContent         = {this.optionsForMenu()}
+            selected            = {this.props.tokens}
+            onInput             = {this.handleInput}
+            onSelect            = {this.handleTokenAdd}
+            tokenAriaFunc       = {this.overrideTokenAriaLabel}
+            onRemove            = {this.handleTokenRemove}
+            combobox-aria-label = {ariaLabel}
+            value               = {true}
+            showListOnFocus     = {!this.props.disabled}
+            ref                 = "TokenInput"
+          />
+        </div>
+      );
+    },
+
     // ---- render ----
 
     render() {
@@ -295,20 +348,14 @@ define([
         <div className           = "ic-Form-control"
              data-row-identifier = {this.rowIdentifier()}
              onKeyDown           = {this.suppressKeys}>
-          <div className  = "ic-Label"
+          <div id         = "assign-to-label"
+               className  = "ic-Label"
                tabIndex   = '0'
                title      = 'Assign to'
                aria-label = 'Assign to'>
              {I18n.t("Assign to")}
-           </div>
-          <TokenInput menuContent     = {this.optionsForMenu()}
-                      selected        = {this.props.tokens}
-                      onInput         = {this.handleInput}
-                      onSelect        = {this.handleTokenAdd}
-                      onRemove        = {this.handleTokenRemove}
-                      value           = {true}
-                      showListOnFocus = {true}
-                      ref             = "TokenInput" />
+          </div>
+          {this.renderTokenInput()}
         </div>
       )
     }

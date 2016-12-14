@@ -1,10 +1,10 @@
 define([
   'react',
   'react-dom',
+  'react-addons-test-utils',
   'jsx/grading/SearchGradingPeriodsField'
-], (React, ReactDOM, SearchGradingPeriodsField) => {
+], (React, ReactDOM, {Simulate}, SearchGradingPeriodsField) => {
   const wrapper = document.getElementById('fixtures');
-  const Simulate = React.addons.TestUtils.Simulate;
 
   module("SearchGradingPeriodsField", {
     renderComponent() {
@@ -21,7 +21,7 @@ define([
   test("onChange trims the search text and sends it to the parent component to filter", function() {
     let searchField = this.renderComponent();
     this.spy(searchField, "search");
-    let input = React.findDOMNode(searchField.refs.input);
+    let input = ReactDOM.findDOMNode(searchField.refs.input);
     input.value = "   i love spaces!   ";
     Simulate.change(input);
     ok(searchField.search.calledWith("i love spaces!"));

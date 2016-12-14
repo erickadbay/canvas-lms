@@ -125,7 +125,7 @@ class AssignmentsController < ApplicationController
         :EXTERNAL_TOOLS => external_tools_json(@external_tools, @context, @current_user, session)
       })
 
-      conditional_release_js_env(@assignment, include_rule: true)
+      conditional_release_js_env(@assignment, includes: :rule)
 
       @can_view_grades = @context.grants_right?(@current_user, session, :view_all_grades)
       @can_grade = @assignment.grants_right?(@current_user, session, :grade)
@@ -335,7 +335,12 @@ class AssignmentsController < ApplicationController
     end
     params[:assignment][:time_zone_edited] = Time.zone.name if params[:assignment]
     group = get_assignment_group(params[:assignment])
-    @assignment ||= @context.assignments.build(params[:assignment])
+    @assignment ||= @context.assignments.build(strong_assignment_params)
+
+    if params[:assignment][:secure_params]
+      secure_params = Canvas::Security.decode_jwt params[:assignment][:secure_params]
+      @assignment.lti_context_id = secure_params[:lti_context_id]
+    end
 
     @assignment.workflow_state ||= "unpublished"
     @assignment.updating_user = @current_user
@@ -375,7 +380,6 @@ class AssignmentsController < ApplicationController
 
   def edit
     rce_js_env(:highrisk)
-
     @assignment ||= @context.assignments.active.find(params[:id])
     if authorized_action(@assignment, @current_user, @assignment.new_record? ? :create : :update)
       @assignment.title = params[:title] if params[:title]
@@ -413,27 +417,29 @@ class AssignmentsController < ApplicationController
       post_to_sis = Assignment.sis_grade_export_enabled?(@context)
 
       hash = {
-        :ASSIGNMENT_GROUPS => json_for_assignment_groups,
-        :GROUP_CATEGORIES => group_categories,
-        :KALTURA_ENABLED => !!feature_enabled?(:kaltura),
-        :POST_TO_SIS => post_to_sis,
-        :HAS_GRADED_SUBMISSIONS => @assignment.graded_submissions_exist?,
-        :SECTION_LIST => (@context.course_sections.active.map { |section|
+        ASSIGNMENT_GROUPS: json_for_assignment_groups,
+        ASSIGNMENT_INDEX_URL: polymorphic_url([@context, :assignments]),
+        ASSIGNMENT_OVERRIDES: assignment_overrides_json(
+          @assignment.overrides_for(@current_user, ensure_set_not_empty: true),
+          @current_user
+        ),
+        COURSE_ID: @context.id,
+        GROUP_CATEGORIES: group_categories,
+        HAS_GRADED_SUBMISSIONS: @assignment.graded_submissions_exist?,
+        KALTURA_ENABLED: !!feature_enabled?(:kaltura),
+        MULTIPLE_GRADING_PERIODS_ENABLED: @context.feature_enabled?(:multiple_grading_periods),
+        PLAGIARISM_DETECTION_PLATFORM: @context.root_account.feature_enabled?(:plagiarism_detection_platform),
+        POST_TO_SIS: post_to_sis,
+        SECTION_LIST: @context.course_sections.active.map do |section|
           {
-            :id => section.id,
-            :name => section.name,
-            :start_at => section.start_at,
-            :end_at => section.end_at,
-            :override_course_and_term_dates => section.restrict_enrollments_to_section_dates
+            id: section.id,
+            name: section.name,
+            start_at: section.start_at,
+            end_at: section.end_at,
+            override_course_and_term_dates: section.restrict_enrollments_to_section_dates
           }
-        }),
-        :ASSIGNMENT_OVERRIDES =>
-          (assignment_overrides_json(
-            @assignment.overrides_for(@current_user, ensure_set_not_empty: true),
-            @current_user
-            )),
-        :ASSIGNMENT_INDEX_URL => polymorphic_url([@context, :assignments]),
-        :VALID_DATE_RANGE => CourseDateRange.new(@context)
+        end,
+        VALID_DATE_RANGE: CourseDateRange.new(@context)
       }
 
       add_crumb(@assignment.title, polymorphic_url([@context, @assignment]))
@@ -444,6 +450,11 @@ class AssignmentsController < ApplicationController
       hash[:CANCEL_TO] = @assignment.new_record? ? polymorphic_url([@context, :assignments]) : polymorphic_url([@context, @assignment])
       hash[:CONTEXT_ID] = @context.id
       hash[:CONTEXT_ACTION_SOURCE] = :assignments
+      hash[:SELECTED_CONFIG_TOOL_ID] = @assignment.tool_settings_tools.first.id unless @assignment.tool_settings_tools.blank?
+
+      if @context.feature_enabled?(:multiple_grading_periods)
+        hash[:active_grading_periods] = GradingPeriod.json_for(@context, @current_user)
+      end
       append_sis_data(hash)
       js_env(hash)
       conditional_release_js_env(@assignment)
@@ -454,9 +465,10 @@ class AssignmentsController < ApplicationController
   def update
     @assignment = @context.assignments.find(params[:id])
     if authorized_action(@assignment, @current_user, :update)
-      params[:assignment][:time_zone_edited] = Time.zone.name if params[:assignment]
-      params[:assignment] ||= {}
-      @assignment.post_to_sis = params[:assignment][:post_to_sis]
+      assignment_params = params[:assignment] ? strong_assignment_params : []
+      assignment_params[:time_zone_edited] = Time.zone.name
+
+      @assignment.post_to_sis = assignment_params[:post_to_sis] if assignment_params.has_key?(:post_to_sis)
       @assignment.updating_user = @current_user
       if params[:assignment][:default_grade]
         params[:assignment][:overwrite_existing_grades] = (params[:assignment][:overwrite_existing_grades] == "1")
@@ -470,13 +482,13 @@ class AssignmentsController < ApplicationController
         @assignment.workflow_state = 'published'
       end
       if Assignment.assignment_type?(params[:assignment_type])
-        params[:assignment][:submission_types] = Assignment.get_submission_type(params[:assignment_type])
+        assignment_params[:submission_types] = Assignment.get_submission_type(params[:assignment_type])
       end
       respond_to do |format|
         @assignment.content_being_saved_by(@current_user)
         group = get_assignment_group(params[:assignment])
         @assignment.assignment_group = group if group
-        if @assignment.update_attributes(params[:assignment])
+        if @assignment.update_attributes(assignment_params)
           log_asset_access(@assignment, "assignments", @assignment_group, 'participate')
           @assignment.context_module_action(@current_user, :contributed)
           @assignment.reload
@@ -506,7 +518,7 @@ class AssignmentsController < ApplicationController
   #          -H 'Authorization: Bearer <token>'
   # @returns Assignment
   def destroy
-    @assignment = @context.assignments.active.find(params[:id])
+    @assignment = @context.assignments.active.api_id(params[:id])
     if authorized_action(@assignment, @current_user, :delete)
       @assignment.destroy
 
@@ -518,6 +530,22 @@ class AssignmentsController < ApplicationController
   end
 
   protected
+
+  def strong_assignment_params
+    strong_params.require(:assignment).
+      permit(:title, :name, :description, :due_at, :points_possible,
+        :grading_type, :submission_types, :assignment_group, :unlock_at, :lock_at,
+        :group_category, :group_category_id, :peer_review_count, :anonymous_peer_reviews,
+        :peer_reviews_due_at, :peer_reviews_assign_at, :grading_standard_id,
+        :peer_reviews, :automatic_peer_reviews, :grade_group_students_individually,
+        :notify_of_update, :time_zone_edited, :turnitin_enabled, :vericite_enabled,
+        :context, :position, :external_tool_tag_attributes, :freeze_on_copy,
+        :only_visible_to_overrides, :post_to_sis, :integration_id, :moderated_grading,
+        :omit_from_final_grade, :intra_group_peer_reviews,
+        :allowed_extensions => strong_anything,
+        :turnitin_settings => strong_anything,
+        :integration_data => strong_anything)
+  end
 
   def get_assignment_group(assignment_params)
     return unless assignment_params
@@ -531,7 +559,6 @@ class AssignmentsController < ApplicationController
   end
 
   def index_edit_params
-    params.slice(*[:title, :due_at, :points_possible, :assignment_group_id])
+    params.slice(*[:title, :due_at, :points_possible, :assignment_group_id, :return_to])
   end
-
 end

@@ -1,13 +1,13 @@
 define([
   'react',
+  'react-addons-update',
   'jsx/grading/gradingStandard',
   'jquery',
   'i18n!external_tools',
   'underscore',
   'jquery.instructure_misc_plugins'
 ],
-function(React, GradingStandard, $, I18n, _) {
-  var update = React.addons.update;
+function(React, update, GradingStandard, $, I18n, _) {
   var GradingStandardCollection = React.createClass({
 
     getInitialState: function() {
@@ -191,7 +191,7 @@ function(React, GradingStandard, $, I18n, _) {
     render: function () {
       return(
         <div>
-          <div className="rs-margin-all pull-right">
+          <div className="pull-right">
             <button ref="addButton" onClick={this.addGradingStandard} className={this.getAddButtonCssClasses()}>
               <i className="icon-add"/>
               {I18n.t(" Add grading scheme")}

@@ -481,9 +481,11 @@ class Group < ActiveRecord::Base
       can :read_forum and
       can :read_announcements and
       can :read_roster and
-      can :send_messages and
-      can :send_messages_all and
       can :view_unpublished_items
+
+      given { |user, session| user && self.has_member?(user) &&
+        (!self.context || self.context.is_a?(Account) || self.context.grants_any_right?(user, session, :send_messages, :send_messages_all)) }
+      can :send_messages and can :send_messages_all
 
       # if I am a member of this group and I can moderate_forum in the group's context
       # (makes it so group members cant edit each other's discussion entries)
@@ -633,19 +635,12 @@ class Group < ActiveRecord::Base
       { :id => TAB_FILES,         :label => t("#group.tabs.files", "Files"), :css_class => 'files', :href => :group_files_path },
     ]
 
-    if root_account.try :canvas_network_enabled?
-      available_tabs << {:id => TAB_PROFILE, :label => t('#tabs.profile', 'Profile'), :css_class => 'profile', :href => :group_profile_path}
-    end
-
     if user && self.grants_right?(user, :read)
       available_tabs << { :id => TAB_CONFERENCES, :label => t('#tabs.conferences', "Conferences"), :css_class => 'conferences', :href => :group_conferences_path }
       available_tabs << { :id => TAB_COLLABORATIONS, :label => t('#tabs.collaborations', "Collaborations"), :css_class => 'collaborations', :href => :group_collaborations_path }
       available_tabs << { :id => TAB_COLLABORATIONS_NEW, :label => t('#tabs.collaborations', "Collaborations"), :css_class => 'collaborations', :href => :group_lti_collaborations_path }
     end
 
-    if root_account.try(:canvas_network_enabled?) && user && grants_right?(user, :manage)
-      available_tabs << { :id => TAB_SETTINGS, :label => t('#tabs.settings', 'Settings'), :css_class => 'settings', :href => :edit_group_path }
-    end
     available_tabs
   end
 

@@ -1,10 +1,10 @@
 define [
   'react'
+  'react-dom'
+  'react-addons-test-utils'
   'underscore'
   'jsx/due_dates/DueDateRemoveRowLink'
-], (React, _, DueDateRemoveRowLink) ->
-
-  Simulate = React.addons.TestUtils.Simulate
+], (React, ReactDOM, {Simulate}, _, DueDateRemoveRowLink) ->
 
   module 'DueDateRemoveRowLink',
     setup: ->
@@ -13,10 +13,10 @@ define [
 
       @handleClick = @stub(props, 'handleClick')
       DueDateRemoveRowLinkElement = React.createElement(DueDateRemoveRowLink, props)
-      @DueDateRemoveRowLink = React.render(DueDateRemoveRowLinkElement, $('<div>').appendTo('body')[0])
+      @DueDateRemoveRowLink = ReactDOM.render(DueDateRemoveRowLinkElement, $('<div>').appendTo('body')[0])
 
     teardown: ->
-      React.unmountComponentAtNode(@DueDateRemoveRowLink.getDOMNode().parentNode)
+      ReactDOM.unmountComponentAtNode(@DueDateRemoveRowLink.getDOMNode().parentNode)
 
   test 'renders', ->
     ok @DueDateRemoveRowLink.isMounted()

@@ -96,12 +96,21 @@ module Lti
           expect(subject.create.capability_offered).to include 'Canvas.placements.courseNavigation'
         end
 
+        it 'adds the Canvas.placements.assignmentConfiguration capability' do
+          expect(subject.create.capability_offered).to include 'Canvas.placements.assignmentConfiguration'
+        end
+
+
         it 'adds the ToolConsumerProfile.url capability' do
           expect(subject.create.capability_offered).to include 'ToolConsumerProfile.url'
         end
 
         it 'adds the OAuth.splitSecret capability' do
           expect(subject.create.capability_offered).to include 'OAuth.splitSecret'
+        end
+
+        it 'adds the Context.id capability' do
+          expect(subject.create.capability_offered).to include 'Context.id'
         end
 
         it 'adds the ToolProxyReregistrationRequest capability if the feature flag is on' do

@@ -9,8 +9,9 @@ define [
   'vendor/timezone/fr_FR'
   'helpers/I18nStubber'
   'helpers/fakeENV'
+  'jsx/shared/conditional_release/CyoeHelper'
   'helpers/jquery.simulate'
-], (Backbone, Assignment, Submission, AssignmentListItemView, $, tz, juneau, french, I18nStubber, fakeENV) ->
+], (Backbone, Assignment, Submission, AssignmentListItemView, $, tz, juneau, french, I18nStubber, fakeENV, CyoeHelper) ->
   screenreaderText = null
   nonScreenreaderText = null
 
@@ -134,11 +135,13 @@ define [
 
   module 'AssignmentListItemViewSpec',
     setup: ->
+      fakeENV.setup()
       genSetup.call @
       @snapshot = tz.snapshot()
       I18nStubber.pushFrame()
 
     teardown: ->
+      fakeENV.teardown()
       genTeardown.call @
       tz.restore(@snapshot)
       I18nStubber.popFrame()
@@ -198,6 +201,7 @@ define [
     ok view.delete.called
 
   test 'does not attempt to delete an assignment due in a closed grading period', ->
+    ENV.MULTIPLE_GRADING_PERIODS_ENABLED = true
     @model.set('has_due_date_in_closed_grading_period', true)
     view = createView(@model)
 
@@ -313,11 +317,13 @@ define [
     ok view.$("#assignment_#{@model.id} a.delete_assignment.disabled").length
 
   test "disallows deleting assignments due in closed grading periods", ->
+    ENV.MULTIPLE_GRADING_PERIODS_ENABLED = true
     @model.set('has_due_date_in_closed_grading_period', true)
     view = createView(@model)
     ok view.$("#assignment_#{@model.id} a.delete_assignment.disabled").length
 
   test "allows deleting non-frozen assignments not due in closed grading periods", ->
+    ENV.MULTIPLE_GRADING_PERIODS_ENABLED = true
     @model.set('frozen', false)
     @model.set('has_due_date_in_closed_grading_period', false)
     view = createView(@model)
@@ -329,6 +335,7 @@ define [
     ok view.$("#assignment_#{@model.id} a.delete_assignment:not(.disabled)").length
 
   test "allows deleting assignments due in closed grading periods for admins", ->
+    ENV.MULTIPLE_GRADING_PERIODS_ENABLED = true
     @model.set('has_assignment_due_in_closed_grading_period', true)
     view = createView(@model, userIsAdmin: true)
     ok view.$("#assignment_#{@model.id} a.delete_assignment:not(.disabled)").length
@@ -584,7 +591,7 @@ define [
       can_update: true
       submission_types: ['online_text_entry']
     view = createView(model)
-    equal view.$('.icon-mastery-path').length, 0
+    equal view.$('.ig-admin .al-options .icon-mastery-path').length, 0
 
   test 'renders for assignment if cyoe on', ->
     model = buildAssignment
@@ -593,7 +600,7 @@ define [
       can_update: true
       submission_types: ['online_text_entry']
     view = createView(model)
-    equal view.$('.icon-mastery-path').length, 1
+    equal view.$('.ig-admin .al-options .icon-mastery-path').length, 1
 
   test 'does not render for ungraded assignment if cyoe on', ->
     model = buildAssignment
@@ -602,7 +609,7 @@ define [
       can_update: true
       submission_types: ['not_graded']
     view = createView(model)
-    equal view.$('.icon-mastery-path').length, 0
+    equal view.$('.ig-admin .al-options .icon-mastery-path').length, 0
 
   test 'renders for assignment quiz if cyoe on', ->
     model = buildAssignment
@@ -612,7 +619,7 @@ define [
       is_quiz_assignment: true
       submission_types: ['online_quiz']
     view = createView(model)
-    equal view.$('.icon-mastery-path').length, 1
+    equal view.$('.ig-admin .al-options .icon-mastery-path').length, 1
 
   test 'does not render for non-assignment quiz if cyoe on', ->
     model = buildAssignment
@@ -631,7 +638,7 @@ define [
       can_update: true
       submission_types: ['discussion_topic']
     view = createView(model)
-    equal view.$('.icon-mastery-path').length, 1
+    equal view.$('.ig-admin .al-options .icon-mastery-path').length, 1
 
   test 'does not render for graded page if cyoe on', ->
     model = buildAssignment
@@ -640,4 +647,94 @@ define [
       can_update: true
       submission_types: ['wiki_page']
     view = createView(model)
-    equal view.$('.icon-mastery-path').length, 0
+    equal view.$('.ig-admin .al-options .icon-mastery-path').length, 0
+
+  module 'AssignListItemViewSpec - mastery paths link',
+    setup: ->
+      ENV.CONDITIONAL_RELEASE_SERVICE_ENABLED = true
+      ENV.CONDITIONAL_RELEASE_ENV = {
+        active_rules: [{
+          trigger_assignment: '1',
+          scoring_ranges: [
+            {
+              assignment_sets: [
+                { assignments: [{ assignment_id: '2' }] },
+              ],
+            },
+          ],
+        }],
+      }
+      CyoeHelper.reloadEnv()
+
+  test 'does not render for assignment if cyoe off', ->
+    ENV.CONDITIONAL_RELEASE_SERVICE_ENABLED = false
+    model = buildAssignment
+      id: '1'
+      title: 'Foo'
+      can_update: true
+      submission_types: ['online_text_entry']
+    view = createView(model)
+    equal view.$('.ig-admin > a[href$="#mastery-paths-editor"]').length, 0
+
+  test 'does not render for assignment if assignment does not have a rule', ->
+    model = buildAssignment
+      id: '2'
+      title: 'Foo'
+      can_update: true
+      submission_types: ['online_text_entry']
+    view = createView(model)
+    equal view.$('.ig-admin > a[href$="#mastery-paths-editor"]').length, 0
+
+  test 'renders for assignment if assignment has a rule', ->
+    model = buildAssignment
+      id: '1'
+      title: 'Foo'
+      can_update: true
+      submission_types: ['online_text_entry']
+    view = createView(model)
+    equal view.$('.ig-admin > a[href$="#mastery-paths-editor"]').length, 1
+
+  module 'AssignListItemViewSpec - mastery paths icon',
+    setup: ->
+      ENV.CONDITIONAL_RELEASE_SERVICE_ENABLED = true
+      ENV.CONDITIONAL_RELEASE_ENV = {
+        active_rules: [{
+          trigger_assignment: '1',
+          scoring_ranges: [
+            {
+              assignment_sets: [
+                { assignments: [{ assignment_id: '2' }] },
+              ],
+            },
+          ],
+        }],
+      }
+      CyoeHelper.reloadEnv()
+
+  test 'does not render for assignment if cyoe off', ->
+    ENV.CONDITIONAL_RELEASE_SERVICE_ENABLED = false
+    model = buildAssignment
+      id: '2'
+      title: 'Foo'
+      can_update: true
+      submission_types: ['online_text_entry']
+    view = createView(model)
+    equal view.$('.mastery-path-icon').length, 0
+
+  test 'does not render for assignment if assignment is not released by a rule', ->
+    model = buildAssignment
+      id: '1'
+      title: 'Foo'
+      can_update: true
+      submission_types: ['online_text_entry']
+    view = createView(model)
+    equal view.$('.mastery-path-icon').length, 0
+
+  test 'renders for assignment if assignment is released by a rule', ->
+    model = buildAssignment
+      id: '2'
+      title: 'Foo'
+      can_update: true
+      submission_types: ['online_text_entry']
+    view = createView(model)
+    equal view.$('.mastery-path-icon').length, 1

@@ -1,9 +1,10 @@
 define [
   'react'
+  'react-dom'
+  'react-addons-test-utils'
   'jsx/external_apps/components/ConfigurationForm'
-], (React, ConfigurationForm) ->
+], (React, ReactDOM, TestUtils, ConfigurationForm) ->
 
-  TestUtils = React.addons.TestUtils
   Simulate = TestUtils.Simulate
   wrapper = document.getElementById('fixtures')
 
@@ -19,7 +20,7 @@ define [
     })
 
   renderComponent = (data) ->
-    React.render(createElement(data), wrapper)
+    ReactDOM.render(createElement(data), wrapper)
 
   getDOMNodes = (data) ->
     component = renderComponent(data)
@@ -36,7 +37,7 @@ define [
 
   module 'ExternalApps.ConfigurationForm',
     teardown: ->
-      React.unmountComponentAtNode wrapper
+      ReactDOM.unmountComponentAtNode wrapper
 
   test 'renders manual form with new tool', ->
     data =

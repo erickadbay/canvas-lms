@@ -1,11 +1,10 @@
 define [
   'react'
+  'react-dom'
+  'react-addons-test-utils'
   'jsx/assignments/ModerationApp'
   'jsx/assignments/actions/ModerationActions'
-], (React, ModerationApp, Actions) ->
-
-  TestUtils = React.addons.TestUtils
-
+], (React, ReactDOM, TestUtils, ModerationApp, Actions) ->
 
   module 'ModerationApp',
     setup: ->
@@ -37,7 +36,7 @@ define [
 
     teardown: ->
       @store = null
-      React.unmountComponentAtNode(@moderationApp.getDOMNode().parentNode)
+      ReactDOM.unmountComponentAtNode(@moderationApp.getDOMNode().parentNode)
 
   test 'it subscribes to the store when mounted', ->
     # TODO: Once the rest of the components get dumbed down, this could be

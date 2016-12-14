@@ -164,8 +164,8 @@ class ConferencesController < ApplicationController
     return unless tab_enabled?(@context.class::TAB_CONFERENCES)
     return unless @current_user
     conferences = @context.grants_right?(@current_user, :manage_content) ?
-      @context.web_conferences :
-      @current_user.web_conferences.shard(@context.shard).where(context_type: @context.class.to_s, context_id: @context.id)
+      @context.web_conferences.active :
+      @current_user.web_conferences.active.shard(@context.shard).where(context_type: @context.class.to_s, context_id: @context.id)
     conferences = conferences.with_config.order("created_at DESC, id DESC")
     api_request? ? api_index(conferences) : web_index(conferences)
   end
@@ -183,7 +183,8 @@ class ConferencesController < ApplicationController
     }
     log_asset_access([ "conferences", @context ], "conferences", "other")
     if @context.is_a? Course
-      @users = User.where(:id => @context.typical_current_enrollments.active_by_date.select(:user_id)).where.not(id: @current_user.id).order(User.sortable_name_order_by_clause).to_a
+      @users = User.where(:id => @context.typical_current_enrollments.active_by_date.where.not(:user_id => @current_user).select(:user_id)).
+        order(User.sortable_name_order_by_clause).to_a
     else
       @users = @context.users.where("users.id<>?", @current_user).order(User.sortable_name_order_by_clause).to_a.uniq
     end

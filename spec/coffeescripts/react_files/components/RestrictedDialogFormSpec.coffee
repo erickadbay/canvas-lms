@@ -1,22 +1,22 @@
 define [
   '../mockFilesENV'
   'react'
+  'react-dom'
+  'react-addons-test-utils'
   'jquery'
   'jsx/files/RestrictedDialogForm'
   'compiled/models/Folder'
-], (mockFilesENV, React, $, RestrictedDialogForm, Folder) ->
-
-  Simulate = React.addons.TestUtils.Simulate
+], (mockFilesENV, React, ReactDOM, {Simulate}, $, RestrictedDialogForm, Folder) ->
 
   module 'RestrictedDialogForm Multiple Selected Items',
     setup: ->
       props =
         models: [new Folder(id: 1000, hidden: false), new Folder(id: 999, hidden: true)]
 
-      @restrictedDialogForm = React.render(React.createElement(RestrictedDialogForm, props), $('<div>').appendTo('#fixtures')[0])
+      @restrictedDialogForm = ReactDOM.render(React.createElement(RestrictedDialogForm, props), $('<div>').appendTo('#fixtures')[0])
 
     teardown: ->
-      React.unmountComponentAtNode(@restrictedDialogForm.getDOMNode().parentNode)
+      ReactDOM.unmountComponentAtNode(@restrictedDialogForm.getDOMNode().parentNode)
       $("#fixtures").empty()
 
   test 'button is disabled but becomes enabled when you select an item', ->
@@ -32,9 +32,9 @@ define [
       props =
         models: [new Folder(id: 999, hidden: true, lock_at: undefined, unlock_at: undefined)]
 
-      @restrictedDialogForm = React.render(React.createElement(RestrictedDialogForm, props), $('<div>').appendTo('#fixtures')[0])
+      @restrictedDialogForm = ReactDOM.render(React.createElement(RestrictedDialogForm, props), $('<div>').appendTo('#fixtures')[0])
     teardown: ->
-      React.unmountComponentAtNode(@restrictedDialogForm.getDOMNode().parentNode)
+      ReactDOM.unmountComponentAtNode(@restrictedDialogForm.getDOMNode().parentNode)
       $("#fixtures").empty()
 
   test 'calls save on the model with only hidden if calendarOption is false', ->

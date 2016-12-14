@@ -203,7 +203,10 @@ describe User do
       discussion_topic_model(:context => @course)
 
       @dashboard_key = StreamItemCache.recent_stream_items_key(@teacher)
-      @context_keys = @contexts.map { |context|
+    end
+
+    let(:context_keys) do
+      @contexts.map { |context|
         StreamItemCache.recent_stream_items_key(@teacher, context.class.base_class.name, context.id)
       }
     end
@@ -212,7 +215,7 @@ describe User do
       enable_cache do
         @teacher.cached_recent_stream_items(:contexts => @contexts)
         expect(Rails.cache.read(@dashboard_key)).to be_blank
-        @context_keys.each do |context_key|
+        context_keys.each do |context_key|
           expect(Rails.cache.read(context_key)).not_to be_blank
         end
       end
@@ -222,7 +225,7 @@ describe User do
       enable_cache do
         @teacher.cached_recent_stream_items # cache the dashboard items
         expect(Rails.cache.read(@dashboard_key)).not_to be_blank
-        @context_keys.each do |context_key|
+        context_keys.each do |context_key|
           expect(Rails.cache.read(context_key)).to be_blank
         end
       end
@@ -477,6 +480,15 @@ describe User do
     create_course_with_student_and_assignment
     @assignment.grade_student @user, :grade => 9
     expect(@user.recent_feedback(:contexts => [@course])).not_to be_empty
+  end
+
+  it "should include recent feedback for student view users" do
+    @course = course_model
+    @course.offer!
+    @assignment = @course.assignments.create :title => "Test Assignment", :points_possible => 10
+    test_student = @course.student_view_student
+    @assignment.grade_student test_student, :grade => 9
+    expect(test_student.recent_feedback).not_to be_empty
   end
 
   it "should not include recent feedback for unpublished assignments" do
@@ -1359,7 +1371,7 @@ describe User do
       (1..3).each do |x|
         course = course_with_student(:course_name => "Course #{x}", :user => @user, :active_all => true).course
         @courses << course
-        @user.favorites.create!(context: course)
+        @user.favorites.first_or_create!(:context_type => "Course", :context_id => course)
       end
 
       @user.save!
@@ -1384,7 +1396,7 @@ describe User do
         (4..6).each do |x|
           course = course_with_student(:course_name => "Course #{x}", :user => @user, :active_all => true, :account => account2).course
           @courses << course
-          @user.favorites.create!(context: course)
+          @user.favorites.first_or_create!(:context_type => "Course", :context_id => course)
         end
       end
 
@@ -1392,6 +1404,23 @@ describe User do
         @user.favorites.by("Course").where("id % 2 = 0").destroy_all
         expect(@user.menu_courses.size).to eql(@courses.length / 2)
       end
+    end
+  end
+
+  describe "adding to favorites on enrollment" do
+    it "doesn't add a favorite if no course favorites already exist" do
+      course_with_student(:active_all => true)
+      expect(@student.favorites.count).to eq 0
+    end
+
+    it "adds a favorite if any course favorites already exist" do
+      u = User.create!
+
+      c1 = course_with_student(:active_all => true, :user => u).course
+      u.favorites.create!(:context_type => "Course", :context_id => c1)
+
+      c2 = course_with_student(:active_all => true, :user => u).course
+      expect(u.favorites.where(:context_type => "Course", :context_id => c2).exists?).to eq true
     end
   end
 
@@ -1481,22 +1510,22 @@ describe User do
 
     it "should create a copy of an existing pseudonym" do
       # from unrelated account
-      user_with_pseudonym(:active_all => 1, :account => @account2, :username => 'unrelated@example.com', :password => 'abcdef')
+      user_with_pseudonym(:active_all => 1, :account => @account2, :username => 'unrelated@example.com', :password => 'abcdefgh')
       new_pseudonym = @user.find_or_initialize_pseudonym_for_account(@account1)
       expect(new_pseudonym).not_to be_nil
       expect(new_pseudonym).to be_new_record
       expect(new_pseudonym.unique_id).to eq 'unrelated@example.com'
 
       # from default account
-      @user.pseudonyms.create!(:unique_id => 'default@example.com', :password => 'abcdef', :password_confirmation => 'abcdef')
-      @user.pseudonyms.create!(:account => @account3, :unique_id => 'preferred@example.com', :password => 'abcdef', :password_confirmation => 'abcdef')
+      @user.pseudonyms.create!(:unique_id => 'default@example.com', :password => 'abcdefgh', :password_confirmation => 'abcdefgh')
+      @user.pseudonyms.create!(:account => @account3, :unique_id => 'preferred@example.com', :password => 'abcdefgh', :password_confirmation => 'abcdefgh')
       new_pseudonym = @user.find_or_initialize_pseudonym_for_account(@account1)
       expect(new_pseudonym).not_to be_nil
       expect(new_pseudonym).to be_new_record
       expect(new_pseudonym.unique_id).to eq 'default@example.com'
 
       # from site admin account
-      @user.pseudonyms.create!(:account => Account.site_admin, :unique_id => 'siteadmin@example.com', :password => 'abcdef', :password_confirmation => 'abcdef')
+      @user.pseudonyms.create!(:account => Account.site_admin, :unique_id => 'siteadmin@example.com', :password => 'abcdefgh', :password_confirmation => 'abcdefgh')
       new_pseudonym = @user.find_or_initialize_pseudonym_for_account(@account1)
       expect(new_pseudonym).not_to be_nil
       expect(new_pseudonym).to be_new_record
@@ -1510,7 +1539,7 @@ describe User do
 
       # from unrelated account, if other options are not viable
       user2 = User.create!
-      @account1.pseudonyms.create!(:user => user2, :unique_id => 'preferred@example.com', :password => 'abcdef', :password_confirmation => 'abcdef')
+      @account1.pseudonyms.create!(:user => user2, :unique_id => 'preferred@example.com', :password => 'abcdefgh', :password_confirmation => 'abcdefgh')
       @user.pseudonyms.detect { |p| p.account == Account.site_admin }.update_attribute(:password_auto_generated, true)
       Account.default.authentication_providers.create!(:auth_type => 'cas')
       Account.default.authentication_providers.first.move_to_bottom
@@ -1519,7 +1548,7 @@ describe User do
       expect(new_pseudonym).to be_new_record
       expect(new_pseudonym.unique_id).to eq 'unrelated@example.com'
       new_pseudonym.save!
-      expect(new_pseudonym.valid_password?('abcdef')).to be_truthy
+      expect(new_pseudonym.valid_password?('abcdefgh')).to be_truthy
     end
 
     it "should not create a new one when there are no viable candidates" do
@@ -1535,13 +1564,13 @@ describe User do
       @account3.authentication_providers.create!(:auth_type => 'cas')
       @account3.authentication_providers.first.move_to_bottom
       expect(@account3).to be_delegated_authentication
-      @user.pseudonyms.create!(:account => @account3, :unique_id => 'jacob@instructure.com', :password => 'abcdef', :password_confirmation => 'abcdef')
+      @user.pseudonyms.create!(:account => @account3, :unique_id => 'jacob@instructure.com', :password => 'abcdefgh', :password_confirmation => 'abcdefgh')
       expect(@user.find_or_initialize_pseudonym_for_account(@account1)).to be_nil
 
       # conflict
       @user2 = User.create! { |u| u.workflow_state = 'registered' }
-      @user2.pseudonyms.create!(:account => @account1, :unique_id => 'jt@instructure.com', :password => 'abcdef', :password_confirmation => 'abcdef')
-      @user.pseudonyms.create!(:unique_id => 'jt@instructure.com', :password => 'ghijkl', :password_confirmation => 'ghijkl')
+      @user2.pseudonyms.create!(:account => @account1, :unique_id => 'jt@instructure.com', :password => 'abcdefgh', :password_confirmation => 'abcdefgh')
+      @user.pseudonyms.create!(:unique_id => 'jt@instructure.com', :password => 'ghijklmn', :password_confirmation => 'ghijklmn')
       expect(@user.find_or_initialize_pseudonym_for_account(@account1)).to be_nil
     end
 
@@ -1551,7 +1580,7 @@ describe User do
       before :once do
         @shard1.activate do
           account = Account.create!
-          user_with_pseudonym(:active_all => 1, :account => account, :password => 'qwerty')
+          user_with_pseudonym(:active_all => 1, :account => account, :password => 'qwertyuiop')
         end
       end
 
@@ -1565,7 +1594,7 @@ describe User do
         p = @user.find_or_initialize_pseudonym_for_account(Account.site_admin)
         expect(p).to be_new_record
         p.save!
-        expect(p.valid_password?('qwerty')).to be_truthy
+        expect(p.valid_password?('qwertyuiop')).to be_truthy
       end
     end
   end
@@ -3072,27 +3101,6 @@ describe User do
     end
   end
 
-  describe "#admin_of_root_account?" do
-    before(:once) do
-      @user = user(active_all: true)
-      @root_account = Account.default
-    end
-
-    it "returns false if the user is not an admin of the root account" do
-      expect(@user).not_to be_admin_of_root_account(@root_account)
-    end
-
-    it "returns true if the user is an admin of the root account" do
-      @root_account.account_users.create!(user: @user)
-      expect(@user).to be_admin_of_root_account(@root_account)
-    end
-
-    it "raises an error if the given account is not a root account" do
-      sub_account = @root_account.sub_accounts.create!
-      expect { @user.admin_of_root_account?(sub_account) }.to raise_error("must be a root account")
-    end
-  end
-
   it "should not grant user_notes rights to restricted users" do
     course_with_ta(:active_all => true)
     student_in_course(:course => @course, :active_all => true)
@@ -3141,12 +3149,5 @@ describe User do
       f.save!
       expect(@user.submissions_folder(@course)).to eq f
     end
-  end
-
-  it { is_expected.to have_many(:submission_comment_participants) }
-  it do
-    is_expected.to have_many(:submission_comments).
-      conditions(-> { published }).
-        through(:submission_comment_participants)
   end
 end

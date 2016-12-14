@@ -74,6 +74,7 @@ class Enrollment < ActiveRecord::Base
   after_save :update_assignment_overrides_if_needed
   after_save :dispatch_invitations_later
   after_save :recalculate_enrollment_state
+  after_save :add_to_favorites_later
   after_destroy :update_assignment_overrides_if_needed
 
   attr_accessor :already_enrolled, :need_touch_user, :skip_touch_user
@@ -649,6 +650,25 @@ class Enrollment < ActiveRecord::Base
     end
   end
 
+  def add_to_favorites_later
+    if self.workflow_state_changed? && self.workflow_state == 'active'
+      self.class.connection.after_transaction_commit do
+        self.send_later_if_production_enqueue_args(:add_to_favorites, :priority => Delayed::LOW_PRIORITY)
+      end
+    end
+  end
+
+  def add_to_favorites
+    # this method was written by Alan Smithee
+    self.user.shard.activate do
+      if user.favorites.where(:context_type => 'Course').exists? # only add a favorite if they've ever favorited anything even if it's no longer in effect
+        Favorite.unique_constraint_retry do
+          user.favorites.where(:context_type => 'Course', :context_id => course).first_or_create!
+        end
+      end
+    end
+  end
+
   workflow do
     state :invited do
       event :reject, :transitions_to => :rejected do self.user.touch; end
@@ -846,6 +866,8 @@ class Enrollment < ActiveRecord::Base
   #
   # return Boolean
   def can_be_deleted_by(user, context, session)
+    return context.grants_right?(user, session, :use_student_view) if fake_student?
+
     can_remove = [StudentEnrollment, ObserverEnrollment].include?(self.class) &&
       context.grants_right?(user, session, :manage_students)
     can_remove ||= context.grants_right?(user, session, :manage_admin_users) unless student?

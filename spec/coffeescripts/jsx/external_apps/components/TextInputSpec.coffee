@@ -1,9 +1,10 @@
 define [
   'react'
+  'react-dom'
+  'react-addons-test-utils'
   'jsx/external_apps/components/TextInput'
-], (React, TextInput) ->
+], (React, ReactDOM, TestUtils, TextInput) ->
 
-  TestUtils = React.addons.TestUtils
   Simulate = TestUtils.Simulate
   wrapper = document.getElementById('fixtures')
 
@@ -18,7 +19,7 @@ define [
     })
 
   renderComponent = (data) ->
-    React.render(createElement(data), wrapper)
+    ReactDOM.render(createElement(data), wrapper)
 
   getDOMNodes = (data) ->
     component = renderComponent(data)
@@ -28,7 +29,7 @@ define [
 
   module 'ExternalApps.TextInput',
     teardown: ->
-      React.unmountComponentAtNode wrapper
+      ReactDOM.unmountComponentAtNode wrapper
 
   test 'renders', ->
     data =

@@ -11,6 +11,8 @@ const STUFF_TO_REV = [
   'public/javascripts/vendor/require.js',
   'public/optimized/vendor/require.js',
   'public/javascripts/vendor/ie11-polyfill.js',
+  'public/javascripts/vendor/lato-fontfaceobserver.js',
+  'public/optimized/vendor/lato-fontfaceobserver.js',
 
   // But for all other javascript, we only load stuff using js_bundle.
   // Meaning that we only include stuff in the "bundles" dir from rails.
@@ -24,8 +26,7 @@ const STUFF_TO_REV = [
 
   // These guys have links in their css to images from their own dir
   'public/javascripts/vendor/slickgrid/**/*',
-  'public/javascripts/bower/jquery.smartbanner/**/*',
-  'public/javascripts/bower/tinymce/skins/lightgray/**/*',
+  'public/javascripts/symlink_to_node_modules/tinymce/skins/lightgray/**/*',
 
   // Include *everything* from plugins & client_apps
   // so we don't have to worry about their internals
@@ -39,7 +40,7 @@ const STUFF_TO_REV = [
 ]
 
 
-gulp.task('rev', () => {
+gulp.task('rev', function(){
   var stuffToRev = STUFF_TO_REV;
   if(process.env.SKIP_JS_REV){
     // just get fonts and images
@@ -55,7 +56,7 @@ gulp.task('rev', () => {
   .pipe(gulp.dest(DIST))
 })
 
-gulp.task('watch', () => {
+gulp.task('watch', function(){
   gulp.watch(STUFF_TO_REV, ['rev'])
 })
 

@@ -1,11 +1,11 @@
 define [
   'react'
+  'react-dom'
+  'react-addons-test-utils'
   'underscore'
   'jsx/dashboard_card/DashboardCardBox'
   'jsx/dashboard_card/CourseActivitySummaryStore'
-], (React, _, DashboardCardBox, CourseActivitySummaryStore) ->
-
-  TestUtils = React.addons.TestUtils
+], (React, ReactDOM, TestUtils, _, DashboardCardBox, CourseActivitySummaryStore) ->
 
   module 'DashboardCardBox',
     setup: ->
@@ -21,7 +21,7 @@ define [
     teardown: ->
       localStorage.clear()
       if @component
-        React.unmountComponentAtNode(@component.getDOMNode().parentNode)
+        ReactDOM.unmountComponentAtNode(@component.getDOMNode().parentNode)
 
   test 'should render div.ic-DashboardCard per provided courseCard', ->
     CardBox = React.createElement(DashboardCardBox, {

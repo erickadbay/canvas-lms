@@ -820,7 +820,7 @@ describe ConversationsController, type: :request do
                     'hidden_for_user' => false,
                     'created_at' => attachment.created_at.as_json,
                     'updated_at' => attachment.updated_at.as_json,
-                    'modified_at' => attachment.updated_at.as_json,
+                    'modified_at' => attachment.modified_at.as_json,
                     'thumbnail_url' => attachment.thumbnail_url,
                     'mime_class' => attachment.mime_class,
                     'media_entry_id' => attachment.media_entry_id }], "participating_user_ids" => [@me.id, @bob.id].sort
@@ -831,6 +831,25 @@ describe ConversationsController, type: :request do
           }
         ]
         expect(json).to eq expected
+      end
+
+      context "cross-shard message forwarding" do
+        specs_require_sharding
+
+        it "should not asplode" do
+          @shard1.activate do
+            course_with_teacher(:active_course => true, :active_enrollment => true, :user => @me)
+            @bob = student_in_course(:course => @course, :name => "bob")
+
+            @message = conversation(@me, :sender => @bob).messages.first
+          end
+
+          json = api_call(:post, "/api/v1/conversations/#{@conversation.conversation_id}/add_message",
+            { :controller => 'conversations', :action => 'add_message', :id => @conversation.conversation_id.to_s, :format => 'json' },
+            { :body => "wut wut", :included_messages => [@message.id]})
+
+          expect(json['last_message']).to eq "wut wut"
+        end
       end
 
       it "should set subject" do
@@ -928,7 +947,8 @@ describe ConversationsController, type: :request do
 
   context "conversation" do
     it "should return the conversation" do
-      conversation = conversation(@bob)
+      conversation = conversation(@bob, :context_type => "Course", :context_id => @course.id)
+
       attachment = @me.conversation_attachments_folder.attachments.create!(:context => @me, :filename => 'test.txt', :display_name => "test.txt", :uploaded_data => StringIO.new('test'))
       media_object = MediaObject.new
       media_object.media_id = '0_12345678'
@@ -1005,7 +1025,7 @@ describe ConversationsController, type: :request do
                 'created_at' => attachment.created_at.as_json,
                 'updated_at' => attachment.updated_at.as_json,
                 'thumbnail_url' => attachment.thumbnail_url,
-                'modified_at' => attachment.updated_at.as_json,
+                'modified_at' => attachment.modified_at.as_json,
                 'mime_class' => attachment.mime_class,
                 'media_entry_id' => attachment.media_entry_id
               }
@@ -1018,6 +1038,18 @@ describe ConversationsController, type: :request do
         "context_name" => conversation.context_name,
         "context_code" => conversation.conversation.context_code,
       })
+    end
+
+    it "should indicate if conversation permissions for the context are missing" do
+      @user = @billy
+      conversation = conversation(@bob, :sender => @billy, :context_type => "Course", :context_id => @course.id)
+
+      @course.account.role_overrides.create!(:permission => :send_messages, :role => student_role, :enabled => false)
+
+      json = api_call(:get, "/api/v1/conversations/#{conversation.conversation_id}",
+        { :controller => 'conversations', :action => 'show', :id => conversation.conversation_id.to_s, :format => 'json' })
+
+      expect(json["cannot_reply"]).to eq true
     end
 
     it "should still include attachment verifiers when using session auth" do

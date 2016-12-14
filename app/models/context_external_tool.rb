@@ -5,6 +5,9 @@ class ContextExternalTool < ActiveRecord::Base
   has_many :content_tags, :as => :content
   has_many :context_external_tool_placements, :autosave => true
 
+  has_many :context_external_tool_assignment_lookups, dependent: :delete_all
+  has_many :tool_settings_assignments, through: :context_external_tool_assignment_lookups, source: :assignment
+
   belongs_to :context, polymorphic: [:course, :account]
   attr_accessible :privacy_level, :domain, :url, :shared_secret, :consumer_key,
                   :name, :description, :custom_fields, :custom_fields_string,
@@ -39,6 +42,12 @@ class ContextExternalTool < ActiveRecord::Base
   set_policy do
     given { |user, session| self.context.grants_right?(user, session, :update) }
     can :read and can :update and can :delete
+
+    given do |user, session|
+      self.grants_right?(user, session, :update) &&
+      self.context.grants_right?(user, session, :lti_add_edit)
+    end
+    can :update_manually
   end
 
   CUSTOM_EXTENSION_KEYS = {:file_menu => [:accept_media_types].freeze}.freeze
@@ -60,6 +69,13 @@ class ContextExternalTool < ActiveRecord::Base
     return unless tag
     launch_url = assignment.external_tool_tag.url
     self.find_external_tool(launch_url, assignment.context)
+  end
+
+  def content_migration_configured?
+    settings.key?('content_migration') &&
+      settings['content_migration'].is_a?(Hash) &&
+      settings['content_migration'].key?('export_start_url') &&
+      settings['content_migration'].key?('import_start_url')
   end
 
   def extension_setting(type, property = nil)

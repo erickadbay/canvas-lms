@@ -1,12 +1,12 @@
 define([
   'jquery',
   'react',
+  'react-dom',
+  'react-addons-test-utils',
   'jsx/files/Breadcrumbs',
   'compiled/models/Folder',
   'helpers/fakeENV'
-], ($, React, Breadcrumbs, Folder, fakeENV) => {
-
-  const TestUtils = React.addons.TestUtils
+], ($, React, ReactDOM, TestUtils, Breadcrumbs, Folder, fakeENV) => {
 
   module('Files Breadcrumbs Component', {
     setup () {
@@ -37,7 +37,7 @@ define([
     equal(links[0].props.href, '/', 'correct home url');
     equal(links[2].props.href, '/courses/1/files', 'rootFolder link has correct url');
     equal(links[3].props.href, '/courses/1/files/folder/test_folder_name', 'correct url for child');
-    equal(React.findDOMNode(links[3]).text, 'test_folder_name', 'shows folder names');
+    equal(ReactDOM.findDOMNode(links[3]).text, 'test_folder_name', 'shows folder names');
   });
 
 });

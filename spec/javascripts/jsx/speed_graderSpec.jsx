@@ -4,8 +4,10 @@ define([
   'speed_grader_helpers',
   'helpers/fakeENV',
   'jsx/grading/helpers/OutlierScoreHelper',
+  'compiled/userSettings',
+  'jsx/speed_grader/mgp',
   'jquery.ajaxJSON'
-  ], ($, SpeedGrader, SpeedgraderHelpers, fakeENV, OutlierScoreHelper) => {
+  ], ($, SpeedGrader, SpeedgraderHelpers, fakeENV, OutlierScoreHelper, userSettings, MGP) => {
 
   module("SpeedGrader", {
     setup() {
@@ -20,6 +22,8 @@ define([
       };
       SpeedGrader.EG.currentStudent = {
         id: 4,
+        name: "Guy B. Studying",
+        submission_state: 'not_graded',
         submission: {
           score: 7,
           grade: 70,
@@ -195,6 +199,14 @@ define([
     ok(srcUrl.indexOf(encodeURIComponent(url)) > -1)
   });
 
+  test('can be fullscreened', () => {
+    let retrieveUrl = 'canvas.com/course/1/external_tools/retrieve?display=borderless&assignment_id=22';
+    let url = 'www.example.com/lti/launch/user/4';
+    SpeedGrader.EG.renderLtiLaunch($div, retrieveUrl, url);
+    let fullscreenAttr = $div.find('iframe').attr('allowfullscreen');
+    equal(fullscreenAttr, "true");
+  })
+
   module('speed_grader#getGradeToShow');
 
   test('returns an empty string if submission is null', () => {
@@ -256,4 +268,75 @@ define([
     let grade = SpeedGrader.EG.getGradeToShow({ grade: 15 }, 'provisional_grader');
     equal(grade, '15');
   });
+
+  module('speed_grader#getStudentNameAndGrade');
+
+  test('returns name and status', () => {
+    let result = SpeedGrader.EG.getStudentNameAndGrade();
+    equal(result, 'Guy B. Studying - not graded');
+  });
+
+  test('hides name if shouldHideStudentNames is true', function() {
+    this.stub(userSettings, 'get').returns(true);
+    this.stub(SpeedGrader.EG, 'currentIndex').returns(5);
+    let result = SpeedGrader.EG.getStudentNameAndGrade();
+    equal(result, 'Student 6 - not graded');
+  });
+
+  module('handleSubmissionSelectionChange', {
+    setup() {
+      fakeENV.setup();
+      this.originalWindowJSONData = window.jsonData;
+      SpeedGrader.EG.currentStudent = {
+        id: 4,
+        name: "Guy B. Studying",
+        enrollments: [{
+          workflow_state: 'active'
+        }],
+        submission_state: 'not_graded',
+        submission: {
+          currentSelectedIndex: 1,
+          score: 7,
+          grade: 70,
+          submission_type: 'basic_lti_launch',
+          workflow_state: 'submitted',
+          submission_history: [
+            {
+              submission: {
+                submission_type: 'basic_lti_launch',
+                external_tool_url: 'foo'
+              }
+            },
+            {
+              submission: {
+                submission_type: 'basic_lti_launch',
+                external_tool_url: 'bar'
+              }
+            }
+          ]
+        }
+      };
+
+      window.jsonData = {
+        id: 27,
+        GROUP_GRADING_MODE: false,
+        points_possible: 10,
+        studentMap : {
+          4 : SpeedGrader.EG.currentStudent
+        }
+      };
+    },
+
+    teardown() {
+      fakeENV.teardown();
+      window.jsonData = this.originalWindowJSONData;
+    }
+  });
+
+  test('should use submission history lti launch url', () => {
+    let renderLtiLaunch = sinon.stub(SpeedGrader.EG, 'renderLtiLaunch');
+    sinon.stub(MGP, 'assignmentClosedForStudent').returns(false);
+    SpeedGrader.EG.handleSubmissionSelectionChange();
+    ok(renderLtiLaunch.calledWith(sinon.match.any, sinon.match.any, "bar"));
+  })
 });

@@ -349,6 +349,9 @@ class ConversationsController < ApplicationController
 
       context_type = context.class.name
       context_id = context.id
+      if %w{Course Group}.include?(context_type)
+        return unless authorized_action(context, @current_user, [:send_messages, :send_messages_all])
+      end
     end
 
     params[:recipients].each do |recipient|
@@ -427,7 +430,7 @@ class ConversationsController < ApplicationController
   end
 
   # @API Get a single conversation
-  # Returns information for a single conversation. Response includes all
+  # Returns information for a single conversation for the current user. Response includes all
   # fields that are present in the list/index action as well as messages
   # and extended participant information.
   #
@@ -546,7 +549,9 @@ class ConversationsController < ApplicationController
                                       messages: messages,
                                       submissions: [],
                                       include_beta: params[:include_beta],
-                                      include_context_name: true)
+                                      include_context_name: true,
+                                      include_reply_permission_check: true
+    )
   end
 
   # @API Edit a conversation
@@ -789,6 +794,9 @@ class ConversationsController < ApplicationController
   #
   def add_message
     get_conversation(true)
+    if @conversation.conversation.replies_locked_for?(@current_user)
+      return render_unauthorized_action
+    end
     if params[:body].present?
       # allow responses to be sent to anyone who is already a conversation participant.
       params[:from_conversation_id] = @conversation.conversation_id
@@ -809,8 +817,11 @@ class ConversationsController < ApplicationController
         message_ids = db_ids
 
         # sanity check: can the user see the included messages?
-        unless ConversationMessageParticipant.where(:conversation_message_id => message_ids,
-            :user_id => @current_user.id).count == message_ids.count
+        found_count = 0
+        Shard.partition_by_shard(message_ids) do |shard_message_ids|
+          found_count += ConversationMessageParticipant.where(:conversation_message_id => shard_message_ids, :user_id => @current_user).count
+        end
+        unless found_count == message_ids.count
           return render_error('included_messages', 'not a participant')
         end
       end

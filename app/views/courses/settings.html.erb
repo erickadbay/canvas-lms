@@ -275,7 +275,11 @@
         <td class="form-label"><%= f.label :license, :en => "License" %></td>
         <td colspan="3">
           <% if can_manage %>
-            <%= f.select :license, Course.licenses.map { |id, attrs| [attrs[:readable_license], id] }%>
+            <% cc, non_cc = Course.licenses.map { |id, attrs| [attrs[:readable_license], id]}.partition{|n, id| id.start_with?('cc')} %>
+            <select name="course[license]" id="course_license">
+              <%= options_for_select(non_cc, @context.license) %>
+              <%= grouped_options_for_select([[t("Creative Commons Licenses"), cc]], @context.license) %>
+            </select>
             <%= license_help_link %>
           <% else %>
             <%= @context.readable_license %>
@@ -397,7 +401,7 @@
               [t('#course.wiki_permissions.teachers_students', "Teacher and Students"), "teachers,students"],
               [t('#course.wiki_permissions.all', "Anyone"), "teachers,students,public"]], {}, :disabled => !can_manage %>
             <label for="course_default_wiki_editing_roles">
-              <%= t('wiki_editing_roles', %{can create, rename, and edit course wiki pages by default}) %>
+              <%= t(%{can create, rename, and edit course pages by default}) %>
             </label><br/>
             <div class="changed_default_wiki_editing_roles" style="display: none; padding-left: 20px; font-size: 0.8em;">
               <input type="checkbox" name="update_default_pages" id="update_default_pages"/>
@@ -409,9 +413,6 @@
       <% if can_manage %>
         <tr>
           <td colspan="4">
-            <% if Account.site_admin.grants_right?(@current_user, :manage_courses) && Account.root_accounts.length > 1 %>
-              <a href="#" class="move_course_link btn"><i class="icon-arrow-right"></i> <%= t('links.move_course', %{Move To Another Account}) %></a>
-            <% end %>
             <span class="course_form">
               <div class="form-actions">
                 <button type="submit" class="btn btn-primary"><%= t('buttons.update_course', %{Update Course Details}) %></button>
@@ -626,32 +627,6 @@
   <% end %>
 </div><!-- end course details tab -->
 
-<% if Account.site_admin.grants_right?(@current_user, :manage_courses) %>
-  <div id="move_course_dialog" style="display: none;">
-    <h2><%= t('headings.move_course', %{Move the course to another root account}) %></h2>
-    <%= t('deatils.move_course', %{Select a new root account for this course.  After you move the course you'll want to specify a new department for the course as well.}) %>
-    <%= form_for :course, :url => course_url(@context), :html => {:method => :put} do |f| %>
-      <table class="formtable">
-        <tr>
-          <td>
-            <%= f.blabel :root_account_id, :en => "Root Account" %>
-          </td>
-          <td>
-            <%= f.select :root_account_id, Account.root_accounts.active.order("name DESC").select([:id, :name]).map{|a| [a.name, a.id] }, :selected => @context.root_account_id %>
-          </td>
-        </tr>
-        <tr>
-          <td colspan="2">
-            <div class="button-container">
-              <button type="button" class="btn cancel_button"><%= t('#buttons.cancel', %{Cancel}) %></button>
-              <button type="submit" class="btn btn-primary"><%= t('buttons.move_course', %{Move Course}) %></button>
-            </div>
-          </td>
-        </tr>
-      </table>
-    <% end %>
-  </div>
-<% end %>
 <div id="edit_letter_grades_form" style="display: none;" data-context_code="<%= @context.asset_string %>">
   <%= render partial: "shared/grading_standard", object: @context.grading_standard, locals: {read_only: !can_manage} %>
   <a href="<%= context_url(@context, :context_grading_standards_url) %>" style="display: none;" class="create_grading_standard_url">&nbsp;</a>

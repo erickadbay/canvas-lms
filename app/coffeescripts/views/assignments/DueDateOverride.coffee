@@ -2,12 +2,15 @@ define [
   'Backbone'
   'underscore'
   'react'
+  'react-dom'
   'jst/assignments/DueDateOverride'
   'compiled/util/DateValidator'
   'i18n!overrides'
   'jsx/due_dates/DueDates'
   'jsx/due_dates/StudentGroupStore'
-], (Backbone, _, React, template, DateValidator, I18n, DueDates, StudentGroupStore) ->
+  'compiled/api/gradingPeriodsApi'
+  'timezone'
+], (Backbone, _, React, ReactDOM, template, DateValidator, I18n, DueDates, StudentGroupStore, GradingPeriodsAPI, tz) ->
 
   class DueDateOverrideView extends Backbone.View
 
@@ -26,10 +29,18 @@ define [
         syncWithBackbone: @setNewOverridesCollection,
         sections: @model.sections.models,
         defaultSectionId: @model.defaultDueDateSectionId,
-        selectedGroupSetId: @model.assignment.get("group_category_id")
+        selectedGroupSetId: @model.assignment.get("group_category_id"),
+        gradingPeriods: @gradingPeriods,
+        multipleGradingPeriodsEnabled: @multipleGradingPeriodsEnabled,
+        isOnlyVisibleToOverrides: @model.assignment.isOnlyVisibleToOverrides(),
+        dueAt: tz.parse(@model.assignment.get("due_at"))
       })
 
-      React.render(DueDatesElement, div)
+      ReactDOM.render(DueDatesElement, div)
+
+    gradingPeriods: GradingPeriodsAPI.deserializePeriods(ENV.active_grading_periods)
+
+    multipleGradingPeriodsEnabled: !!ENV.MULTIPLE_GRADING_PERIODS_ENABLED
 
     validateBeforeSave: (data, errors) =>
       return errors unless data
@@ -42,7 +53,13 @@ define [
       checkedRows = []
       for override in data.assignment_overrides
         continue if _.contains(checkedRows, override.rowKey)
-        dateValidator = new DateValidator({date_range: _.extend({}, ENV.VALID_DATE_RANGE), data: override})
+        dateValidator = new DateValidator({
+          date_range: _.extend({}, ENV.VALID_DATE_RANGE)
+          data: override
+          multipleGradingPeriodsEnabled: @multipleGradingPeriodsEnabled
+          gradingPeriods: @gradingPeriods
+          userIsAdmin: _.contains(ENV.current_user_roles, "admin")
+        })
         rowErrors = dateValidator.validateDates()
         errors = _.extend(errors, rowErrors)
         for own element, msg of rowErrors

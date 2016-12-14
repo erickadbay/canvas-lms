@@ -1,19 +1,20 @@
 define [
   'jquery',
   'react',
+  'react-dom',
+  'react-addons-test-utils',
   'jsx/shared/FileNotFound'
-], ($, React, FileNotFound) ->
-  TestUtils = React.addons.TestUtils
+], ($, React, ReactDOM, TestUtils, FileNotFound) ->
 
   module 'FileNotFoundSpec',
     setup: ->
       @element = React.createElement(FileNotFound, {
         contextCode: 'fakeContextCode'
-      });
+      })
 
   test 'it renders', ->
     rendered = TestUtils.renderIntoDocument(@element)
     ok rendered, 'the component rendered'
 
-    React.unmountComponentAtNode(React.findDOMNode(rendered).parentNode)
+    ReactDOM.unmountComponentAtNode(ReactDOM.findDOMNode(rendered).parentNode)
 

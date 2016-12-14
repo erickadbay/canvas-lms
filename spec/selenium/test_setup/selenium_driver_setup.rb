@@ -1,6 +1,28 @@
 require "fileutils"
 
 module SeleniumDriverSetup
+  # WebDriver uses port 7054 (the "locking port") as a mutex to ensure
+  # that we don't launch two Firefox instances at the same time. Each
+  # new instance you create will wait for the mutex before starting
+  # the browser, then release it as soon as the browser is open.
+  #
+  # The default port mutex wait timeout is 45 seconds.
+  # Bump it to 90 seconds as a stopgap for the recent flood of:
+  # `unable to bind to locking port 7054 within 45 seconds`
+  #
+  # TODO: Investigate why it's taking so long to launch Firefox, or
+  #       what process is hogging port 7054.
+  module ::Selenium
+    module WebDriver
+      module Firefox
+        class Launcher
+          remove_const(:SOCKET_LOCK_TIMEOUT)
+        end
+      end
+    end
+  end
+  Selenium::WebDriver::Firefox::Launcher::SOCKET_LOCK_TIMEOUT = 90
+
   # Number of recent specs to show in failure pages
   RECENT_SPEC_RUNS_LIMIT = 500
   # Number of identical failures in a row before we abort this worker
@@ -48,6 +70,8 @@ module SeleniumDriverSetup
     driver.manage.timeouts.implicit_wait = IMPLICIT_WAIT_TIMEOUT
     driver.manage.timeouts.script_timeout = 60
 
+    puts "Browser: #{browser_name(driver)} - #{browser_version(driver)}"
+
     driver
   end
 
@@ -80,6 +104,8 @@ module SeleniumDriverSetup
     @headless = Headless.new(
       display: display,
       dimensions: "1920x1080x24",
+      reuse: false,
+      destroy_at_exit: true,
       video: {
         provider: :ffmpeg,
         # yay interframe compression
@@ -133,22 +159,12 @@ module SeleniumDriverSetup
   # oj's xss_safe escapes forward slashes, which makes paths invalid
   # in the firefox profile, which makes log_file asplode
   # see https://github.com/SeleniumHQ/selenium/issues/2435#issuecomment-245458210
-  if CANVAS_RAILS4_0
-    def with_vanilla_json
-      orig_options =  MultiJson.dump_options
-      MultiJson.dump_options = {:escape_mode => :json}
-      yield
-    ensure
-      MultiJson.dump_options = orig_options
-    end
-  else
-    def with_vanilla_json
-      orig_options = Oj.default_options
-      Oj.default_options = {:escape_mode => :json}
-      yield
-    ensure
-      Oj.default_options = orig_options
-    end
+  def with_vanilla_json
+    orig_options = Oj.default_options
+    Oj.default_options = {:escape_mode => :json}
+    yield
+  ensure
+    Oj.default_options = orig_options
   end
 
   def chrome_driver
@@ -197,7 +213,7 @@ module SeleniumDriverSetup
   end
 
   def selenium_url
-    $selenium_config[:remote_url]
+    (browser == :chrome) ? $selenium_config[:remote_url_chrome] : $selenium_config[:remote_url_firefox]
   end
 
   def ruby_firefox_driver
@@ -214,6 +230,9 @@ module SeleniumDriverSetup
   alias_method :driver, :selenium_driver
 
   def firefox_profile
+    if $selenium_config[:firefox_path].present?
+      Selenium::WebDriver::Firefox::Binary.path = "#{$selenium_config[:firefox_path]}"
+    end
     profile = Selenium::WebDriver::Firefox::Profile.new
     profile.add_extension Rails.root.join("spec/selenium/test_setup/JSErrorCollector.xpi")
     profile.log_file = "/dev/stdout"
@@ -226,8 +245,17 @@ module SeleniumDriverSetup
     profile
   end
 
-  def set_native_events(setting)
-    driver.instance_variable_get(:@bridge).instance_variable_get(:@capabilities).instance_variable_set(:@native_events, setting)
+  def browser_name(driver)
+    driver_capabilities(driver).browser_name
+  end
+
+  def browser_version(driver)
+    driver_capabilities(driver).version
+  end
+
+  def driver_capabilities(driver)
+    driver.instance_variable_get(:@bridge)
+          .instance_variable_get(:@capabilities)
   end
 
   def app_host
@@ -265,6 +293,12 @@ module SeleniumDriverSetup
 
   def record_errors(example, exception, log_messages)
     js_errors = driver.execute_script("return window.JSErrorCollector_errors && window.JSErrorCollector_errors.pump()") || []
+
+    # ignore "mutating the [[Prototype]] of an object" js errors
+    mutating_prototype_error = "mutating the [[Prototype]] of an object"
+    js_errors.reject! do |error|
+      error["errorMessage"].start_with? mutating_prototype_error
+    end
 
     # always send js errors to stdout, even if the spec passed. we have to
     # empty the JSErrorCollector anyway, so we might as well show it.

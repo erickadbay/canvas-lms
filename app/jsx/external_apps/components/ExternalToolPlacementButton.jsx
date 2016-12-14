@@ -11,7 +11,7 @@ define([
   const modalOverrides = {
     overlay : {
       backgroundColor: 'rgba(0,0,0,0.5)'
-    },  
+    },
     content : {
       position: 'static',
       top: '0',
@@ -74,6 +74,7 @@ define([
       var allPlacements = {
         "account_navigation":I18n.t("Account Navigation"),
         "assignment_selection":I18n.t("Assignment Selection"),
+        "assignment_configuration":I18n.t("Assignment Configuration"),
         "assignment_menu":I18n.t("Assignment Menu"),
         "collaboration":I18n.t("Collaboration"),
         "course_home_sub_navigation":I18n.t("Course Home Sub Navigation"),
@@ -157,7 +158,7 @@ define([
 
       if (this.props.type === "button") {
         return(
-          <a href="#" tabIndex="-1" ref="placementButton" role="menuitem" aria-label={editAriaLabel} className="btn long" onClick={this.openModal} >
+          <a href="#" ref="placementButton" role="menuitem" aria-label={editAriaLabel} className="btn long" onClick={this.openModal} >
             <i className="icon-info" data-tooltip="left" title={I18n.t('Tool Placements')}></i>
             { this.getModal() }
           </a>

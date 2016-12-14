@@ -1,19 +1,18 @@
 define [
   'react'
+  'react-dom'
   'jquery'
   'jsx/files/CurrentUploads'
   'compiled/react_files/modules/FileUploader'
   'compiled/react_files/modules/UploadQueue'
-], (React, $, CurrentUploads, FileUploader, UploadQueue) ->
-
-  Simulate = React.addons.TestUtils.Simulate
+], (React, ReactDOM, $, CurrentUploads, FileUploader, UploadQueue) ->
 
   module 'CurrentUploads',
     setup: ->
-      @uploads = React.render(React.createElement(CurrentUploads), $('<div>').appendTo('#fixtures')[0])
+      @uploads = ReactDOM.render(React.createElement(CurrentUploads), $('<div>').appendTo('#fixtures')[0])
 
     teardown: ->
-      React.unmountComponentAtNode(@uploads.getDOMNode().parentNode)
+      ReactDOM.unmountComponentAtNode(@uploads.getDOMNode().parentNode)
       $("#fixtures").empty()
 
     mockUploader: (name, progress) ->

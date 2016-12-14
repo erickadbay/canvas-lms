@@ -228,6 +228,34 @@ describe DiscussionTopic do
       expect(@topic.visible_for?(admin)).to be_truthy
     end
 
+    context "participants with teachers and tas" do
+      before(:once) do
+        group_course = course(:active_course => true)
+        @group_student, @group_ta, @group_teacher = create_users(3, return_type: :record)
+        @not_group_student, @group_designer = create_users(2, return_type: :record)
+        group_course.enroll_teacher(@group_teacher).accept!
+        group_course.enroll_ta(@group_ta).accept!
+        group_course.enroll_designer(@group_designer).accept!
+        group_category = group_course.group_categories.create(:name => "new cat")
+        group = group_course.groups.create(:name => "group", :group_category => group_category)
+        group.add_user(@group_student)
+        @announcement = group.announcements.build(:title => "group topic", :message => "group message")
+        @announcement.save!
+      end
+
+      it "should be visible to instructors and tas" do
+        [@group_student, @group_ta, @group_teacher].each do |user|
+          expect(@announcement.active_participants_include_tas_and_teachers.include?(user)).to be_truthy
+        end
+      end
+
+      it "should not include people out of the group or non-instructors" do
+        [@not_group_student, @group_designer].each do |user|
+          expect(@announcement.active_participants_include_tas_and_teachers.include?(user)).to be_falsey
+        end
+      end
+    end
+
     context "differentiated assignements" do
       before do
         @course = course(:active_course => true)
@@ -1220,6 +1248,34 @@ describe DiscussionTopic do
       sub = @assignment.submissions.where(:user_id => @student).first
       expect(sub.attachments.to_a).to eq [@attachment]
     end
+
+    it "should associate attachments with graded discussion submissions even with silly deleted topics" do
+      gc1 = group_category(:name => "gc1")
+      group_with_user(group_category: gc1, user: @student, :context => @course)
+      gc2 = group_category(:name => "gc2")
+      group_with_user(group_category: gc2, user: @student, :context => @course)
+      group2 = @group
+
+      @assignment = assignment_model(:course => @course)
+      @topic.assignment = @assignment
+      @topic.group_category = gc1
+      @topic.save!
+      @topic.group_category = gc2 # switching group categories deletes the old child topics
+      @topic.save!
+      @topic.reload
+
+      # can't use child_topic_for to show the exact bug
+      # because that's where the reported bug is
+      sub_topic = @topic.child_topics.where(:context_type => "Group", :context_id => group2).first
+
+      attachment_model(:context => @user, :uploaded_data => stub_png_data, :filename => "homework.png")
+      entry = sub_topic.reply_from(:user => @student, :text => "entry")
+      entry.attachment = @attachment
+      entry.save!
+
+      sub = @assignment.submissions.where(:user_id => @student).first
+      expect(sub.attachments.to_a).to eq [@attachment]
+    end
   end
 
   describe "#unread_count" do
@@ -1654,6 +1710,37 @@ describe DiscussionTopic do
       it "fulfills module completion requirements on the root topic" do
         @topic.reply_from(user: @student, text: "huttah!")
         expect(@student.context_module_progressions.where(context_module_id: @module).first.requirements_met).to include({id: @topic_tag.id, type: 'must_contribute'})
+      end
+    end
+  end
+
+  describe "locked by context module" do
+    before(:once) do
+      discussion_topic_model(context: @course)
+      @module = @course.context_modules.create!(name: 'some module')
+      @module.add_item(type: 'discussion_topic', id: @topic.id)
+      @module.unlock_at = 2.months.from_now
+      @module.save!
+      @topic.reload
+    end
+
+    it "stays visible_for? student even when locked by module" do
+      expect(@topic.visible_for?(@student)).to be_truthy
+    end
+
+    it "is locked_for? students when locked by module" do
+      expect(@topic.locked_for?(@student, deep_check_if_needed: true)).to be_truthy
+    end
+
+    describe "reject_context_module_locked_topics" do
+      it "filters module locked topics for students" do
+        topics = DiscussionTopic.reject_context_module_locked_topics([@topic], @student)
+        expect(topics).to be_empty
+      end
+
+      it "does not filter module locked topics for teachers" do
+        topics = DiscussionTopic.reject_context_module_locked_topics([@topic], @teacher)
+        expect(topics).not_to be_empty
       end
     end
   end

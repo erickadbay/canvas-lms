@@ -1,12 +1,12 @@
 define [
   'react'
+  'react-dom'
+  'react-addons-test-utils'
   'jquery'
   'jsx/files/UsageRightsIndicator'
   'compiled/models/Folder'
   'compiled/models/File'
-], (React, $, UsageRightsIndicator, Folder, File) ->
-
-  TestUtils = React.addons.TestUtils
+], (React, ReactDOM, TestUtils, $, UsageRightsIndicator, Folder, File) ->
 
   module 'UsageRightsIndicator'
 
@@ -45,7 +45,7 @@ define [
     equal uRI.getDOMNode().type, "submit", "submit type"
     equal uRI.getDOMNode().tagName, "BUTTON", "tag name is a button"
 
-    React.unmountComponentAtNode(uRI.getDOMNode().parentNode)
+    ReactDOM.unmountComponentAtNode(uRI.getDOMNode().parentNode)
 
   test "handleClick opens a modal with UsageRightsDialog", ->
     openedModal = false
@@ -62,12 +62,12 @@ define [
 
     ok openedModal, "tried to open the modal"
 
-    React.unmountComponentAtNode(uRI.getDOMNode().parentNode)
+    ReactDOM.unmountComponentAtNode(uRI.getDOMNode().parentNode)
 
 
   module "UsageRightsIndicator: Icon Classess & Screenreader text",
     teardown: ->
-      React.unmountComponentAtNode(@uRI.getDOMNode().parentNode)
+      ReactDOM.unmountComponentAtNode(@uRI.getDOMNode().parentNode)
 
     renderIndicator: (usage_rights) ->
       props = {

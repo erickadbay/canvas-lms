@@ -1,14 +1,14 @@
 define [
   'react'
+  'react-dom'
+  'react-addons-test-utils'
   'jquery'
   'underscore'
   'jsx/grading/gradingPeriodCollection'
   'helpers/fakeENV'
   'jquery.instructure_misc_plugins'
   'compiled/jquery.rails_flash_notifications'
-], (React, $, _, GradingPeriodCollection, fakeENV) ->
-
-  TestUtils = React.addons.TestUtils
+], (React, ReactDOM, TestUtils, $, _, GradingPeriodCollection, fakeENV) ->
 
   module 'GradingPeriodCollection',
     setup: ->
@@ -88,7 +88,7 @@ define [
       @gradingPeriodCollection = TestUtils.renderIntoDocument(GradingPeriodCollectionElement)
       @server.respond()
     teardown: ->
-      React.unmountComponentAtNode(@gradingPeriodCollection.getDOMNode().parentNode)
+      ReactDOM.unmountComponentAtNode(@gradingPeriodCollection.getDOMNode().parentNode)
       fakeENV.teardown()
       @server.restore()
 
@@ -294,7 +294,7 @@ define [
       @server.respond()
 
     teardown: ->
-      React.unmountComponentAtNode(@gradingPeriodCollection.getDOMNode().parentNode)
+      ReactDOM.unmountComponentAtNode(@gradingPeriodCollection.getDOMNode().parentNode)
       fakeENV.teardown()
       @server.restore()
 
@@ -339,7 +339,7 @@ define [
       @server.respond()
 
     teardown: ->
-      React.unmountComponentAtNode(@gradingPeriodCollection.getDOMNode().parentNode)
+      ReactDOM.unmountComponentAtNode(@gradingPeriodCollection.getDOMNode().parentNode)
       fakeENV.teardown()
       @server.restore()
 

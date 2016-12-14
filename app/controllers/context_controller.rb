@@ -222,11 +222,17 @@ class ContextController < ApplicationController
           :pendingInvitationsCount => @context.invited_count_visible_to(@current_user)
         }
       })
+      if manage_students || manage_admins
+        js_env({:ROOT_ACCOUNT_NAME => @domain_root_account.name})
+        if @context.root_account.open_registration? || @context.root_account.grants_right?(@current_user, session, :manage_user_logins)
+          js_env({:INVITE_USERS_URL => course_invite_users_url(@context)})
+        end
+      end
     elsif @context.is_a?(Group)
       if @context.grants_right?(@current_user, :read_as_admin)
-        @users = @context.participating_users.order_by_sortable_name.uniq
+        @users = @context.participating_users.uniq.order_by_sortable_name
       else
-        @users = @context.participating_users_in_context(sort: true).uniq
+        @users = @context.participating_users_in_context(sort: true).uniq.order_by_sortable_name
       end
       @primary_users = { t('roster.group_members', 'Group Members') => @users }
       if course = @context.context.try(:is_a?, Course) && @context.context
@@ -367,7 +373,7 @@ class ContextController < ApplicationController
   ].freeze
   def undelete_index
     if authorized_action(@context, @current_user, :manage_content)
-      @item_types = WORKFLOW_TYPES.select { |type| @context.class.reflections.key?(CANVAS_RAILS4_0 ? type : type.to_s) }.
+      @item_types = WORKFLOW_TYPES.select { |type| @context.class.reflections.key?(type.to_s) }.
           map { |type| @context.association(type).reader }
 
       @item_types << @context.wiki.wiki_pages if @context.respond_to? :wiki
@@ -389,7 +395,6 @@ class ContextController < ApplicationController
       scope = @context.wiki if type == 'wiki_page'
       type = 'all_discussion_topic' if type == 'discussion_topic'
       type = type.pluralize
-      type = type.to_sym if CANVAS_RAILS4_0
       raise "invalid type" unless ITEM_TYPES.include?(type.to_sym) && scope.class.reflections.key?(type)
       @item = scope.association(type).reader.find(id)
       @item.restore

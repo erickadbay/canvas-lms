@@ -1,10 +1,10 @@
 define [
   'jquery'
   'react'
+  'react-dom'
+  'react-addons-test-utils'
   'jsx/shared/modal-buttons'
-], ($, React, ModalButtons) ->
-
-  TestUtils = React.addons.TestUtils
+], ($, React, ReactDOM, TestUtils, ModalButtons) ->
 
   module 'ModalButtons'
 
@@ -15,7 +15,7 @@ define [
     ok $(component.getDOMNode()).hasClass("cat"), "has parent class"
     ok $(component.getDOMNode()).find(".dog").length == 1, "Finds footer class name"
 
-    React.unmountComponentAtNode(component.getDOMNode().parentNode)
+    ReactDOM.unmountComponentAtNode(component.getDOMNode().parentNode)
 
   test "renders children", ->
     mB = React.createElement(ModalButtons, {},
@@ -24,5 +24,5 @@ define [
     component = TestUtils.renderIntoDocument(mB)
 
     ok $(component.getDOMNode()).find('.cool_div').length == 1, "renders the child component"
-    React.unmountComponentAtNode(component.getDOMNode().parentNode)
+    ReactDOM.unmountComponentAtNode(component.getDOMNode().parentNode)
 

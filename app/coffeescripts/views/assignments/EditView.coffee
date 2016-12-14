@@ -8,6 +8,7 @@ define [
   'jst/assignments/EditView'
   'compiled/userSettings'
   'compiled/models/TurnitinSettings'
+  'compiled/models/VeriCiteSettings'
   'compiled/views/assignments/TurnitinSettingsDialog'
   'compiled/fn/preventDefault'
   'compiled/views/calendar/MissingDateDialogView'
@@ -16,13 +17,15 @@ define [
   'compiled/jquery/toggleAccessibly'
   'compiled/views/editor/KeyboardShortcuts'
   'jsx/shared/conditional_release/ConditionalRelease'
+  'compiled/util/deparam'
+  'jsx/assignments/AssignmentConfigurationTools'
   'jqueryui/dialog'
   'jquery.toJSON'
   'compiled/jquery.rails_flash_notifications'
 ], (INST, I18n, ValidatedFormView, _, $, RichContentEditor, template,
-userSettings, TurnitinSettings, TurnitinSettingsDialog, preventDefault, MissingDateDialog,
+userSettings, TurnitinSettings, VeriCiteSettings, TurnitinSettingsDialog, preventDefault, MissingDateDialog,
 AssignmentGroupSelector, GroupCategorySelector, toggleAccessibly, RCEKeyboardShortcuts,
-ConditionalRelease) ->
+ConditionalRelease, deparam, AssignmentConfigurationsTools) ->
 
   RichContentEditor.preloadRemoteModule()
 
@@ -42,6 +45,7 @@ ConditionalRelease) ->
     RESTRICT_FILE_UPLOADS_OPTIONS = '#restrict_file_extensions_container'
     ALLOWED_EXTENSIONS = '#allowed_extensions_container'
     TURNITIN_ENABLED = '#assignment_turnitin_enabled'
+    VERICITE_ENABLED = '#assignment_vericite_enabled'
     ADVANCED_TURNITIN_SETTINGS = '#advanced_turnitin_settings_link'
     GRADING_TYPE_SELECTOR = '#grading_type_selector'
     GRADED_ASSIGNMENT_FIELDS = '#graded_assignment_fields'
@@ -54,12 +58,14 @@ ConditionalRelease) ->
     EXTERNAL_TOOLS_NEW_TAB = '#assignment_external_tool_tag_attributes_new_tab'
     ASSIGNMENT_POINTS_POSSIBLE = '#assignment_points_possible'
     ASSIGNMENT_POINTS_CHANGE_WARN = '#point_change_warning'
+    SECURE_PARAMS = '#secure_params'
 
     PEER_REVIEWS_BOX = '#assignment_peer_reviews'
     INTRA_GROUP_PEER_REVIEWS = '#intra_group_peer_reviews_toggle'
     GROUP_CATEGORY_BOX = '#has_group_category'
     MODERATED_GRADING_BOX = '#assignment_moderated_grading'
     CONDITIONAL_RELEASE_TARGET = '#conditional_release_target'
+    ASSIGNMENT_CONFIGURATION_TOOLS = '#assignment_configuration_tools'
 
     els: _.extend({}, @::els, do ->
       els = {}
@@ -73,6 +79,7 @@ ConditionalRelease) ->
       els["#{RESTRICT_FILE_UPLOADS_OPTIONS}"] = '$restrictFileUploadsOptions'
       els["#{ALLOWED_EXTENSIONS}"] = '$allowedExtensions'
       els["#{TURNITIN_ENABLED}"] = '$turnitinEnabled'
+      els["#{VERICITE_ENABLED}"] = '$vericiteEnabled'
       els["#{ADVANCED_TURNITIN_SETTINGS}"] = '$advancedTurnitinSettings'
       els["#{GRADING_TYPE_SELECTOR}"] = '$gradingTypeSelector'
       els["#{GRADED_ASSIGNMENT_FIELDS}"] = '$gradedAssignmentFields'
@@ -87,6 +94,8 @@ ConditionalRelease) ->
       els["#{ASSIGNMENT_POINTS_CHANGE_WARN}"] = '$pointsChangeWarning'
       els["#{MODERATED_GRADING_BOX}"] = '$moderatedGradingBox'
       els["#{CONDITIONAL_RELEASE_TARGET}"] = '$conditionalReleaseTarget'
+      els["#{ASSIGNMENT_CONFIGURATION_TOOLS}"] = '$assignmentConfigurationTools'
+      els["#{SECURE_PARAMS}"] = '$secureParams'
       els
     )
 
@@ -95,9 +104,11 @@ ConditionalRelease) ->
       events["click .cancel_button"] = 'handleCancel'
       events["click .save_and_publish"] = 'saveAndPublish'
       events["change #{SUBMISSION_TYPE}"] = 'handleSubmissionTypeChange'
+      events["change #{ONLINE_SUBMISSION_TYPES}"] = 'handleOnlineSubmissionTypeChange'
       events["change #{RESTRICT_FILE_UPLOADS}"] = 'handleRestrictFileUploadsChange'
       events["click #{ADVANCED_TURNITIN_SETTINGS}"] = 'showTurnitinDialog'
       events["change #{TURNITIN_ENABLED}"] = 'toggleAdvancedTurnitinSettings'
+      events["change #{VERICITE_ENABLED}"] = 'toggleAdvancedTurnitinSettings'
       events["change #{ALLOW_FILE_UPLOADS}"] = 'toggleRestrictFileUploads'
       events["click #{EXTERNAL_TOOLS_URL}_find"] = 'showExternalToolsDialog'
       events["change #assignment_points_possible"] = 'handlePointsChange'
@@ -120,20 +131,20 @@ ConditionalRelease) ->
       @assignment = @model
       @setDefaultsIfNew()
       @dueDateOverrideView = options.views['js-assignment-overrides']
-      @on 'success', => window.location = @model.get 'html_url'
+      @on 'success', @redirectAfterSave
       @gradingTypeSelector.on 'change:gradingType', @handleGradingTypeChange
       if ENV.CONDITIONAL_RELEASE_SERVICE_ENABLED
         @gradingTypeSelector.on 'change:gradingType', @onChange
 
     handleCancel: (ev) =>
       ev.preventDefault()
-      window.location = ENV.CANCEL_TO if ENV.CANCEL_TO?
+      @redirectAfterCancel()
 
     settingsToCache:() =>
       ["assignment_group_id","grading_type","submission_type","submission_types",
        "points_possible","allowed_extensions","peer_reviews","peer_review_count",
        "automatic_peer_reviews","group_category_id","grade_group_students_individually",
-       "turnitin_enabled"]
+       "turnitin_enabled", "vericite_enabled"]
 
     handlePointsChange:(ev) =>
       ev.preventDefault()
@@ -201,9 +212,17 @@ ConditionalRelease) ->
 
     showTurnitinDialog: (ev) =>
       ev.preventDefault()
-      turnitinDialog = new TurnitinSettingsDialog(model: @assignment.get('turnitin_settings'))
+      type = "turnitin"
+      model = @assignment.get('turnitin_settings')
+      if @$vericiteEnabled.prop('checked')
+        type = "vericite"
+        model = @assignment.get('vericite_settings')
+      turnitinDialog = new TurnitinSettingsDialog(model, type)
       turnitinDialog.render().on 'settings:change', (settings) =>
-        @assignment.set 'turnitin_settings', new TurnitinSettings(settings)
+        if @$vericiteEnabled.prop('checked')
+          @assignment.set 'vericite_settings', new VeriCiteSettings(settings)
+        else
+          @assignment.set 'turnitin_settings', new TurnitinSettings(settings)
         turnitinDialog.off()
         turnitinDialog.remove()
 
@@ -224,7 +243,7 @@ ConditionalRelease) ->
 
     toggleAdvancedTurnitinSettings: (ev) =>
       ev.preventDefault()
-      @$advancedTurnitinSettings.toggleAccessibly @$turnitinEnabled.prop('checked')
+      @$advancedTurnitinSettings.toggleAccessibly (@$turnitinEnabled.prop('checked') || @$vericiteEnabled.prop('checked'))
 
     handleRestrictFileUploadsChange: =>
       @$allowedExtensions.toggleAccessibly @$restrictFileUploads.prop('checked')
@@ -239,6 +258,13 @@ ConditionalRelease) ->
       @$externalToolSettings.toggleAccessibly subVal == 'external_tool'
       @$groupCategorySelector.toggleAccessibly subVal != 'external_tool'
       @$peerReviewsFields.toggleAccessibly subVal != 'external_tool'
+      @$assignmentConfigurationTools.toggleAccessibly subVal == 'online' && ENV.PLAGIARISM_DETECTION_PLATFORM
+      if subVal == 'online'
+        @handleOnlineSubmissionTypeChange()
+
+    handleOnlineSubmissionTypeChange: (env) =>
+      showConfigTools = @$onlineSubmissionTypes.find(ALLOW_FILE_UPLOADS).attr('checked')
+      @$assignmentConfigurationTools.toggleAccessibly showConfigTools && ENV.PLAGIARISM_DETECTION_PLATFORM
 
     afterRender: =>
       # have to do these here because they're rendered by other things
@@ -246,9 +272,18 @@ ConditionalRelease) ->
       @$intraGroupPeerReviews = $("#{INTRA_GROUP_PEER_REVIEWS}")
       @$groupCategoryBox = $("#{GROUP_CATEGORY_BOX}")
 
+      @assignmentConfigurationTools = AssignmentConfigurationsTools.attach(
+            @$assignmentConfigurationTools.get(0),
+            parseInt(ENV.COURSE_ID),
+            @$secureParams.val(),
+            parseInt(ENV.SELECTED_CONFIG_TOOL_ID))
+
       @_attachEditorToDescription()
       @addTinyMCEKeyboardShortcuts()
       @handleModeratedGradingChange()
+      @handleOnlineSubmissionTypeChange()
+      @handleSubmissionTypeChange()
+
       if ENV?.HAS_GRADED_SUBMISSIONS
         @disableCheckbox(@$moderatedGradingBox, I18n.t("Moderated grading setting cannot be changed if graded submissions exist"))
       if ENV.CONDITIONAL_RELEASE_SERVICE_ENABLED
@@ -382,7 +417,6 @@ ConditionalRelease) ->
     showErrors: (errors) ->
       # override view handles displaying override errors, remove them
       # before calling super
-      # see getFormValues in DueDateView.coffee
       delete errors.assignmentOverrides
       super(errors)
       @trigger 'show-errors', errors
@@ -461,6 +495,22 @@ ConditionalRelease) ->
           message: I18n.t 'External Tool URL cannot be left blank'
         ]
       errors
+
+    redirectAfterSave: ->
+      window.location = @locationAfterSave(deparam())
+
+    locationAfterSave: (params) ->
+      return params['return_to'] if params['return_to']?
+      @model.get 'html_url'
+
+    redirectAfterCancel: ->
+      location = @locationAfterCancel(deparam())
+      window.location = location if location
+
+    locationAfterCancel: (params) ->
+      return params['return_to'] if params['return_to']?
+      return ENV.CANCEL_TO if ENV.CANCEL_TO?
+      null
 
     onChange: ->
       if ENV.CONDITIONAL_RELEASE_SERVICE_ENABLED && @assignmentUpToDate

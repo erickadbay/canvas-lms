@@ -20,22 +20,8 @@
     border-bottom: 1px solid $ic-border-light;
     padding-bottom: $ic-sp;
     margin: 0 0 $ic-sp;
-    font-weight: 500;
+    font-weight: bold;
   }
-}
-
-.rs-match-list-indent {
-  padding-left: 31px;
-}
-
-// .rs-margin-lr was removed because it is not needed since #right-side has it's own margin
-.rs-margin-top {
-  margin-top: $right_side_margin;
-}
-
-.rs-margin-all {
-  margin-top: $right_side_margin;
-  margin-bottom: $right_side_margin;
 }
 
 .rs-margin-bottom {

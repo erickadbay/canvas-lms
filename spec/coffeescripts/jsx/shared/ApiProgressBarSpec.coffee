@@ -1,10 +1,11 @@
 define [
   'underscore',
   'react',
+  'react-dom',
+  'react-addons-test-utils',
   'jsx/shared/ApiProgressBar'
   'jsx/shared/stores/ProgressStore'
-], (_, React, ApiProgressBar, ProgressStore) ->
-  TestUtils = React.addons.TestUtils
+], (_, React, ReactDOM, TestUtils, ApiProgressBar, ProgressStore) ->
 
   module 'ApiProgressBarSpec',
     setup: ->
@@ -94,7 +95,7 @@ define [
       equal component.state[stateName], @progress[stateName],
         "component #{stateName} should equal progress #{stateName}"
 
-    React.unmountComponentAtNode(component.getDOMNode().parentNode)
+    ReactDOM.unmountComponentAtNode(component.getDOMNode().parentNode)
 
   test 'isComplete', ->
     ApiProgressBarElement = React.createElement(ApiProgressBar, {
@@ -141,7 +142,7 @@ define [
     component.poll()
     ok @storeSpy.called, 'should fetch when progress id is present'
 
-    React.unmountComponentAtNode(component.getDOMNode().parentNode)
+    ReactDOM.unmountComponentAtNode(component.getDOMNode().parentNode)
 
   test 'render', ->
     ApiProgressBarElement = React.createElement(ApiProgressBar, {
@@ -155,4 +156,4 @@ define [
     ok !_.isNull(component.getDOMNode()),
       'should render to DOM if is not in progress'
 
-    React.unmountComponentAtNode(component.getDOMNode().parentNode)
+    ReactDOM.unmountComponentAtNode(component.getDOMNode().parentNode)

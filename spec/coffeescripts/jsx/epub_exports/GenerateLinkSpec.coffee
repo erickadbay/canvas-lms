@@ -1,11 +1,12 @@
 define [
   'jquery',
   'react',
+  'react-dom',
+  'react-addons-test-utils',
   'jsx/epub_exports/GenerateLink',
   'jsx/epub_exports/CourseStore',
   'i18n!epub_exports',
-], ($, React, GenerateLink, CourseEpubExportStore, I18n) ->
-  TestUtils = React.addons.TestUtils
+], ($, React, ReactDOM, TestUtils, GenerateLink, CourseEpubExportStore, I18n) ->
 
   module 'GenerateLink',
     setup: ->
@@ -20,7 +21,7 @@ define [
     GenerateLinkElement = React.createElement(GenerateLink, @props)
     component = TestUtils.renderIntoDocument(GenerateLinkElement)
     ok component.showGenerateLink(), 'should be true without epub_export object'
-    React.unmountComponentAtNode(component.getDOMNode().parentNode)
+    ReactDOM.unmountComponentAtNode(component.getDOMNode().parentNode)
 
     @props.course.epub_export = {
       permissions: {
@@ -39,7 +40,7 @@ define [
     GenerateLinkElement = React.createElement(GenerateLink, @props)
     component = TestUtils.renderIntoDocument(GenerateLinkElement)
     ok component.showGenerateLink(), 'should be true with permissions to rengenerate'
-    React.unmountComponentAtNode(component.getDOMNode().parentNode)
+    ReactDOM.unmountComponentAtNode(component.getDOMNode().parentNode)
 
   test 'state triggered', ->
     clock = sinon.useFakeTimers()
@@ -56,7 +57,7 @@ define [
 
     clock.restore()
     CourseEpubExportStore.create.restore()
-    React.unmountComponentAtNode(component.getDOMNode().parentNode)
+    ReactDOM.unmountComponentAtNode(component.getDOMNode().parentNode)
 
   test 'render', ->
     clock = sinon.useFakeTimers()
@@ -89,4 +90,4 @@ define [
 
     clock.restore()
     CourseEpubExportStore.create.restore()
-    React.unmountComponentAtNode(component.getDOMNode().parentNode)
+    ReactDOM.unmountComponentAtNode(component.getDOMNode().parentNode)

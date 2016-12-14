@@ -22,7 +22,7 @@ class AssignmentOverride < ActiveRecord::Base
 
   simply_versioned :keep => 10
 
-  attr_accessible
+  strong_params
 
   attr_accessor :dont_touch_assignment, :preloaded_student_ids, :changed_student_ids
 
@@ -32,7 +32,7 @@ class AssignmentOverride < ActiveRecord::Base
   has_many :assignment_override_students, :dependent => :destroy, :validate => false
   validates_presence_of :assignment_version, :if => :assignment
   validates_presence_of :title, :workflow_state
-  validates_inclusion_of :set_type, :in => %w(CourseSection Group ADHOC)
+  validates :set_type, inclusion: %w(CourseSection Group ADHOC Noop)
   validates_length_of :title, :maximum => maximum_string_length, :allow_nil => true
 
   concrete_set = lambda{ |override| ['CourseSection', 'Group'].include?(override.set_type) }
@@ -82,7 +82,7 @@ class AssignmentOverride < ActiveRecord::Base
 
   def set_not_empty?
     overridable = assignment? ? assignment : quiz
-    ['CourseSection', 'Group'].include?(self.set_type) ||
+    ['CourseSection', 'Group', 'Noop'].include?(self.set_type) ||
     (set.any? && overridable.context.current_enrollments.where(user_id: set).exists?)
   end
 
@@ -128,7 +128,9 @@ class AssignmentOverride < ActiveRecord::Base
 
     if ActiveRecord::Relation === visible_ids
       column = visible_ids.klass == User ? :id : visible_ids.select_values.first
-      scope = scope.joins("INNER JOIN #{visible_ids.klass.quoted_table_name} ON assignment_override_students.user_id=#{visible_ids.klass.table_name}.#{column}")
+      scope = scope.primary_shard.activate {
+        scope.joins("INNER JOIN #{visible_ids.klass.quoted_table_name} ON assignment_override_students.user_id=#{visible_ids.klass.table_name}.#{column}")
+      }
       return scope.merge(visible_ids.except(:select))
     end
 
@@ -164,13 +166,15 @@ class AssignmentOverride < ActiveRecord::Base
   def set
     if self.set_type == 'ADHOC'
       assignment_override_students.preload(:user).map(&:user)
+    elsif self.set_type == 'Noop'
+      nil
     else
       super
     end
   end
 
   def set_id=(id)
-    if self.set_type == 'ADHOC'
+    if %w(ADHOC Noop).include? self.set_type
       write_attribute(:set_id, id)
     else
       super
@@ -259,6 +263,8 @@ class AssignmentOverride < ActiveRecord::Base
       set.participating_students
     when 'Group'
       set.participants
+    else
+      []
     end
   end
 

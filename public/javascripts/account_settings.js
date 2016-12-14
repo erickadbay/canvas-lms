@@ -81,7 +81,7 @@ define([
           required: ['help_link_name'],
           property_validations: {
             'help_link_name': function(value){
-              if (value && value.length > 12) { return I18n.t("help_menu_name_too_long", "Help menu name is too long")}
+              if (value && value.length > 30) { return I18n.t("help_menu_name_too_long", "Help menu name is too long")}
             }
           }
         }
@@ -166,7 +166,7 @@ define([
       });
     });
 
-    $("#turnitin, #enable_equella").change(function() {
+    $("#turnitin, #enable_equella, #account_settings_sis_syncing_value").change(function() {
       var $myFieldset = $('#'+ $(this).attr('id') + '_settings'),
           iAmChecked = $(this).attr('checked');
       $myFieldset.showIf(iAmChecked);

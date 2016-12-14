@@ -1,10 +1,10 @@
 define [
   'react'
+  'react-dom'
+  'react-addons-test-utils'
   'underscore'
   'jsx/dashboard_card/DashboardCardAction'
-], (React, _, DashboardCardAction) ->
-
-  TestUtils = React.addons.TestUtils
+], (React, ReactDOM, TestUtils, _, DashboardCardAction) ->
 
   module 'DashboardCardAction',
     setup: ->
@@ -15,7 +15,7 @@ define [
 
     teardown: ->
       if @component?
-        React.unmountComponentAtNode(@component.getDOMNode().parentNode)
+        ReactDOM.unmountComponentAtNode(@component.getDOMNode().parentNode)
 
   test 'should render link & i', ->
     @component = TestUtils.renderIntoDocument(React.createElement(DashboardCardAction,

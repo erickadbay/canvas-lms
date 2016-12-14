@@ -1,51 +1,8 @@
 require_relative '../../spec_helper'
 
 describe SupportHelpers::Tii do
-  describe "Fixer" do
-    describe "#job_id" do
-      it 'generates a unique id' do
-        fixer1 = SupportHelpers::Tii::ShardFixer.new('email')
-        fixer2 = SupportHelpers::Tii::ShardFixer.new('email')
-        expect(fixer1.job_id).not_to eq(fixer2.job_id)
-      end
-    end
-
-    describe '#fixer_name' do
-      it 'returns the fixer class name and job id' do
-        fixer = SupportHelpers::Tii::ShardFixer.new('email')
-        expect(fixer.fixer_name).to eq "TurnItIn ShardFixer ##{fixer.job_id}"
-      end
-    end
-
-    describe '#monitor_and_fix' do
-      it 'emails the caller upon success' do
-        fixer = SupportHelpers::Tii::ShardFixer.new('email')
-        Message.expects(:new).with(
-          to: 'email',
-          from: 'tii_script@instructure.com',
-          subject: 'TurnItIn Fixer Success',
-          body: "#{fixer.fixer_name} fixed 0 assignments in 0 seconds!",
-          delay_for: 0
-        )
-        Mailer.expects(:create_message)
-        fixer.monitor_and_fix
-      end
-
-      it 'emails the caller upon error' do
-        fixer = SupportHelpers::Tii::Fixer.new('email')
-        Message.expects(:new)
-        Mailer.expects(:create_message)
-        begin
-          fixer.monitor_and_fix
-        rescue => error
-          expect(error.message).to eq 'SupportHelpers::Tii::Fixer must implement #fix'
-        end
-      end
-    end
-  end
-
   describe "Error2305Fixer" do
-    before do
+    before :once do
       @a1 = generate_assignment({error_code: 2305, error_message: 'sad panda'})
       @a2 = generate_assignment
       @a3 = generate_assignment({error_code: 2305, error_message: 'rad panda'})
@@ -81,7 +38,7 @@ describe SupportHelpers::Tii do
   end
 
   describe "MD5Fixer" do
-    before do
+    before :once do
       @a1 = generate_assignment({error_message: 'MD5 not authenticated'})
       @a2 = generate_assignment({error_code: 2305, error_message: 'bad panda'})
       @a3 = generate_assignment({error_message: 'MD5 not authenticated'})
@@ -117,7 +74,7 @@ describe SupportHelpers::Tii do
   end
 
   describe "ShardFixer" do
-    before do
+    before :once do
       @a1 = generate_assignment
       @s1 = Timecop.travel(2.hours.ago) do
         generate_submission({status: 'rawr error rawr'}, @a1)
@@ -166,7 +123,7 @@ describe SupportHelpers::Tii do
 
   describe "AssignmentFixer" do
     context ':course_fix' do
-      before do
+      before :once do
         generate_submissions({status: "error", student_error: {error_code: 204}})
       end
 
@@ -190,7 +147,7 @@ describe SupportHelpers::Tii do
     end
 
     context ':resubmit_fix' do
-      before do
+      before :once do
         generate_submissions({status: "error", student_error: {error_code: 216}})
       end
 
@@ -238,7 +195,7 @@ describe SupportHelpers::Tii do
     end
 
     context ':assignment_exists_fix' do
-      before do
+      before :once do
         generate_submissions({status: "error", assignment_error: {error_code: 419}})
       end
 
@@ -262,7 +219,7 @@ describe SupportHelpers::Tii do
     end
 
     context ':assignment_fix without assignment_error key' do
-      before do
+      before :once do
         generate_submissions({status: "error", panda: {error_code: 206}})
       end
 
@@ -286,7 +243,7 @@ describe SupportHelpers::Tii do
     end
 
     context ':md5_fix' do
-      before do
+      before :once do
         generate_submissions({status: "error", student_error: {error_code: 204}})
       end
 
@@ -305,7 +262,7 @@ describe SupportHelpers::Tii do
     end
 
     context ':no_fix' do
-      before do
+      before :once do
         @a1 = generate_assignment
         @s1 = Timecop.travel(2.hours.ago) do
           generate_submission({error_code: 216}, @a1)
@@ -445,6 +402,15 @@ describe SupportHelpers::Tii do
   #   end
   # end
 
+  let_once(:course) do
+    course = course_model
+    course.account.turnitin_account_id = 99
+    course.account.turnitin_shared_secret = "sekret"
+    course.account.turnitin_host = "turn.it.in"
+    course.account.save
+    course
+  end
+
   def generate_submissions(turnitin_data)
     @a1 = generate_assignment
     @s1 = Timecop.travel(2.hours.ago) do
@@ -466,11 +432,7 @@ describe SupportHelpers::Tii do
   end
 
   def generate_assignment(settings = {})
-    assignment = assignment_model
-    @c.account.turnitin_account_id = 99
-    @c.account.turnitin_shared_secret = "sekret"
-    @c.account.turnitin_host = "turn.it.in"
-    @c.account.save
+    assignment = assignment_model(course: course)
     assignment.turnitin_settings = Turnitin::Client.default_assignment_turnitin_settings
     settings.each { |k, v| assignment.turnitin_settings[k] = v }
     assignment.save

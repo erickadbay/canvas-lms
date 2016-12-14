@@ -1,11 +1,10 @@
 define [
   'react'
+  'react-dom'
+  'react-addons-test-utils'
   'underscore'
   'jsx/due_dates/DueDateAddRowButton'
-], (React, _, DueDateAddRowButton) ->
-
-  Simulate = React.addons.TestUtils.Simulate
-  SimulateNative = React.addons.TestUtils.SimulateNative
+], (React, ReactDOM, {Simulate, SimulateNative}, _, DueDateAddRowButton) ->
 
   module 'DueDateAddRowButton with true display prop',
     setup: ->
@@ -13,10 +12,10 @@ define [
         display: true
 
       DueDateAddRowButtonElement = React.createElement(DueDateAddRowButton, props)
-      @DueDateAddRowButton = React.render(DueDateAddRowButtonElement, $('<div>').appendTo('body')[0])
+      @DueDateAddRowButton = ReactDOM.render(DueDateAddRowButtonElement, $('<div>').appendTo('body')[0])
 
     teardown: ->
-      React.unmountComponentAtNode(@DueDateAddRowButton.getDOMNode().parentNode)
+      ReactDOM.unmountComponentAtNode(@DueDateAddRowButton.getDOMNode().parentNode)
 
   test 'renders a button', ->
     ok @DueDateAddRowButton.isMounted()
@@ -29,11 +28,11 @@ define [
         display: false
 
       DueDateAddRowButtonElement = React.createElement(DueDateAddRowButton, props)
-      @DueDateAddRowButton = React.render(DueDateAddRowButtonElement, $('<div>').appendTo('body')[0])
+      @DueDateAddRowButton = ReactDOM.render(DueDateAddRowButtonElement, $('<div>').appendTo('body')[0])
 
     teardown: ->
       if @DueDateAddRowButton.getDOMNode()
-        React.unmountComponentAtNode(@DueDateAddRowButton.getDOMNode().parentNode)
+        ReactDOM.unmountComponentAtNode(@DueDateAddRowButton.getDOMNode().parentNode)
 
   test 'does not render a button', ->
     ok @DueDateAddRowButton.isMounted()

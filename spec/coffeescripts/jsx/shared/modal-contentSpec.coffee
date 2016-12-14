@@ -1,10 +1,10 @@
 define [
   'jquery'
   'react'
+  'react-dom'
+  'react-addons-test-utils'
   'jsx/shared/modal-content'
-], ($, React, ModalContent) ->
-
-  TestUtils = React.addons.TestUtils
+], ($, React, ReactDOM, TestUtils, ModalContent) ->
 
   module 'ModalContent'
 
@@ -14,7 +14,8 @@ define [
 
     ok $(component.getDOMNode()).hasClass('cat'), "applies class name"
 
-    React.unmountComponentAtNode(component.getDOMNode().parentNode)
+    ReactDOM.unmountComponentAtNode(component.getDOMNode().parentNode)
+
   test "renders children components", ->
     mC = React.createElement(ModalContent, {},
       React.createElement('div', className: 'my_fun_div')
@@ -23,4 +24,4 @@ define [
 
     ok $(component.getDOMNode()).find('.my_fun_div'), "inserts child component elements"
 
-    React.unmountComponentAtNode(component.getDOMNode().parentNode)
+    ReactDOM.unmountComponentAtNode(component.getDOMNode().parentNode)

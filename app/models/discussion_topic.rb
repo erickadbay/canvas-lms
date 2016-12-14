@@ -438,7 +438,7 @@ class DiscussionTopic < ActiveRecord::Base
   def child_topic_for(user)
     group_ids = user.group_memberships.active.pluck(:group_id) &
       context.groups.active.pluck(:id)
-    child_topics.where(context_id: group_ids, context_type: 'Group').first
+    child_topics.active.where(context_id: group_ids, context_type: 'Group').first
   end
 
   def change_child_topic_subscribed_state(new_state, current_user)
@@ -914,8 +914,24 @@ class DiscussionTopic < ActiveRecord::Base
     end
   end
 
+  def active_participants_include_tas_and_teachers(include_observers=false)
+    participants = active_participants(include_observers)
+    if self.context.is_a?(Group) && !self.context.course.nil?
+      participants += self.context.course.teachers
+      participants += self.context.course.tas
+      participants = participants.compact.uniq
+    end
+    participants
+  end
+
   def users_with_permissions(users)
-    users.select{|u| self.is_announcement ? self.context.grants_right?(u, :read_announcements) : self.context.grants_right?(u, :read_forum)}
+    permission = self.is_announcement ? :read_announcements : :read_forum
+    if self.course.is_a?(Course)
+      self.course.filter_users_by_permission(users, permission)
+    else
+      # sucks to be an account-level group
+      users.select{|u| self.is_announcement ? self.context.grants_right?(u, :read_announcements) : self.context.grants_right?(u, :read_forum)}
+    end
   end
 
   def course
@@ -1036,7 +1052,7 @@ class DiscussionTopic < ActiveRecord::Base
         locked = {:asset_string => self.asset_string, :lock_at => self.lock_at, :can_view => true}
       elsif !opts[:skip_assignment] && (self.assignment && l = self.assignment.locked_for?(user, opts))
         locked = l
-      elsif self.could_be_locked && item = locked_by_module_item?(user, opts[:deep_check_if_needed])
+      elsif self.could_be_locked && item = locked_by_module_item?(user, opts)
         locked = {:asset_string => self.asset_string, :context_module => item.context_module.attributes}
       elsif self.locked? # nothing more specific, it's just locked
         locked = {:asset_string => self.asset_string, :can_view => true}
@@ -1044,6 +1060,27 @@ class DiscussionTopic < ActiveRecord::Base
         locked = l
       end
       locked
+    end
+  end
+
+  def self.reject_context_module_locked_topics(topics, user)
+    progressions = ContextModuleProgression.
+      joins(context_module: :content_tags).
+      where({
+        user: user,
+        "content_tags.content_type" => "DiscussionTopic",
+        "content_tags.content_id" => topics,
+      }).
+      select("context_module_progressions.*").
+      distinct_on("context_module_progressions.id").
+      preload(:user)
+    progressions = progressions.index_by(&:context_module_id)
+
+    return topics.reject do |topic|
+      topic.locked_by_module_item?(user, {
+        deep_check_if_needed: true,
+        user_context_module_progressions: progressions,
+      })
     end
   end
 

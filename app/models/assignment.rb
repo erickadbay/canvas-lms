@@ -21,6 +21,7 @@ require 'set'
 require 'canvas/draft_state_validations'
 require 'bigdecimal'
 require_dependency 'turnitin'
+require_dependency 'vericite'
 
 class Assignment < ActiveRecord::Base
   include Workflow
@@ -34,16 +35,7 @@ class Assignment < ActiveRecord::Base
   include Canvas::DraftStateValidations
   include TurnitinID
 
-  attr_accessible :title, :name, :description, :due_at, :points_possible,
-    :grading_type, :submission_types, :assignment_group, :unlock_at, :lock_at,
-    :group_category, :group_category_id, :peer_review_count, :anonymous_peer_reviews,
-    :peer_reviews_due_at, :peer_reviews_assign_at, :grading_standard_id,
-    :peer_reviews, :automatic_peer_reviews, :grade_group_students_individually,
-    :notify_of_update, :time_zone_edited, :turnitin_enabled,
-    :turnitin_settings, :context, :position, :allowed_extensions,
-    :external_tool_tag_attributes, :freeze_on_copy,
-    :only_visible_to_overrides, :post_to_sis, :integration_id, :integration_data, :moderated_grading,
-    :omit_from_final_grade, :intra_group_peer_reviews
+  strong_params
 
   ALLOWED_GRADING_TYPES = %w(
     pass_fail percent letter_grade gpa_scale points not_graded
@@ -72,15 +64,19 @@ class Assignment < ActiveRecord::Base
   belongs_to :grading_standard
   belongs_to :group_category
 
+  has_many :context_external_tool_assignment_lookups, dependent: :delete_all
+  has_many :tool_settings_tools, through: :context_external_tool_assignment_lookups, source: :context_external_tool
+
   has_one :external_tool_tag, :class_name => 'ContentTag', :as => :context, :dependent => :destroy
   validates_associated :external_tool_tag, :if => :external_tool?
   validate :group_category_changes_ok?
   validate :discussion_group_ok?
   validate :positive_points_possible?
   validate :moderation_setting_ok?
+  validates :lti_context_id, presence: true, uniqueness: true
 
   accepts_nested_attributes_for :external_tool_tag, :update_only => true, :reject_if => proc { |attrs|
-    # only accept the url, content_type, content_id, and new_tab params, the other accessible
+    # only accept the url, content_tyupe, content_id, and new_tab params, the other accessible
     # params don't apply to an content tag being used as an external_tool_tag
     content = case attrs['content_type']
               when 'Lti::MessageHandler', 'lti/message_handler'
@@ -93,6 +89,7 @@ class Assignment < ActiveRecord::Base
     false
   }
   before_validation do |assignment|
+    assignment.lti_context_id ||= SecureRandom.uuid
     if assignment.external_tool? && assignment.external_tool_tag
       assignment.external_tool_tag.context = assignment
       assignment.external_tool_tag.content_type ||= "ContextExternalTool"
@@ -121,6 +118,12 @@ class Assignment < ActiveRecord::Base
       errors.add :group_category_id, I18n.t("group_category_locked",
                                             "The group category can't be changed because students have already submitted on this assignment")
     end
+  end
+
+  def secure_params
+    body = {}
+    body[:lti_assignment_id] = self.lti_context_id || SecureRandom.uuid
+    Canvas::Security.create_jwt(body)
   end
 
   def discussion_group_ok?
@@ -180,10 +183,12 @@ class Assignment < ActiveRecord::Base
     automatic_peer_reviews
     peer_reviews_due_at
     peer_review_count
+    intra_group_peer_reviews
     submission_types
     group_category_id
     grade_group_students_individually
     turnitin_enabled
+    vericite_enabled
     turnitin_settings
     allowed_extensions
     muted
@@ -376,19 +381,59 @@ class Assignment < ActiveRecord::Base
     return self.turnitin_settings[:current]
   end
 
-  def turnitin_settings
-    if super.empty?
-      settings = Turnitin::Client.default_assignment_turnitin_settings
-      default_originality = course.turnitin_originality if course
-      settings[:originality_report_visibility] = default_originality if default_originality
+  def turnitin_settings settings=nil
+    if super().empty?
+      # turnitin settings are overloaded for all plagiarism services as requested, so
+      # alternative services can send in their own default settings, otherwise,
+      # default to Turnitin settings
+      if settings.nil?
+        settings = Turnitin::Client.default_assignment_turnitin_settings
+        default_originality = course.turnitin_originality if course
+        settings[:originality_report_visibility] = default_originality if default_originality
+      end
       settings
     else
-      super
+      super()
     end
   end
 
   def turnitin_settings=(settings)
     settings = Turnitin::Client.normalize_assignment_turnitin_settings(settings)
+    unless settings.blank?
+      [:created, :error].each do |key|
+        settings[key] = self.turnitin_settings[key] if self.turnitin_settings[key]
+      end
+    end
+    write_attribute :turnitin_settings, settings
+  end
+
+  def create_in_vericite
+    return false unless Canvas::Plugin.find(:vericite).try(:enabled?)
+    return true if self.turnitin_settings[:current] && self.turnitin_settings[:vericite]
+    vericite = VeriCite::Client.new()
+    res = vericite.createOrUpdateAssignment(self, self.turnitin_settings)
+
+    # make sure the defaults get serialized
+    self.turnitin_settings = turnitin_settings
+
+    if res[:assignment_id]
+      self.turnitin_settings[:created] = true
+      self.turnitin_settings[:current] = true
+      self.turnitin_settings[:vericite] = true
+      self.turnitin_settings.delete(:error)
+    else
+      self.turnitin_settings[:error] = res
+    end
+    self.save
+    return self.turnitin_settings[:current]
+  end
+
+  def vericite_settings
+    self.turnitin_settings(VeriCite::Client.default_assignment_vericite_settings)
+  end
+
+  def vericite_settings=(settings)
+    settings = VeriCite::Client.normalize_assignment_vericite_settings(settings)
     unless settings.blank?
       [:created, :error].each do |key|
         settings[key] = self.turnitin_settings[key] if self.turnitin_settings[key]
@@ -900,7 +945,7 @@ class Assignment < ActiveRecord::Base
       assignment_for_user = self.overridden_for(user)
       if (assignment_for_user.unlock_at && assignment_for_user.unlock_at > Time.zone.now)
         locked = {:asset_string => assignment_for_user.asset_string, :unlock_at => assignment_for_user.unlock_at}
-      elsif self.could_be_locked && item = locked_by_module_item?(user, opts[:deep_check_if_needed])
+      elsif self.could_be_locked && item = locked_by_module_item?(user, opts)
         locked = {:asset_string => self.asset_string, :context_module => item.context_module.attributes}
       elsif (assignment_for_user.lock_at && assignment_for_user.lock_at < Time.zone.now)
         locked = {:asset_string => assignment_for_user.asset_string, :lock_at => assignment_for_user.lock_at, :can_view => true}
@@ -1009,7 +1054,7 @@ class Assignment < ActiveRecord::Base
 
     given do |user, session|
       self.context.grants_right?(user, session, :manage_assignments) &&
-        (user.admin_of_root_account?(self.context.root_account) ||
+        (self.context.account_membership_allows(user) ||
          !due_for_any_student_in_closed_grading_period?)
     end
     can :delete
@@ -1037,12 +1082,9 @@ class Assignment < ActiveRecord::Base
   def participants_with_visibility(opts={})
     users = context.participating_admins
 
-    applicable_students = if opts[:excluded_user_ids]
-                            students_with_visibility.reject{|s| opts[:excluded_user_ids].include?(s.id)}
-                          else
-                            students_with_visibility
-                          end
-
+    student_scope = students_with_visibility(context.participating_students_by_date)
+    student_scope = student_scope.where.not(:id => opts[:excluded_user_ids]) if opts[:excluded_user_ids]
+    applicable_students = student_scope.to_a
     users += applicable_students
 
     if opts[:include_observers]
@@ -1099,7 +1141,7 @@ class Assignment < ActiveRecord::Base
       group.users
         .joins(:enrollments)
         .where(:enrollments => { :course_id => self.context})
-        .merge(Course.instance_exec(&Course.reflections[CANVAS_RAILS4_0 ? :admin_visible_student_enrollments : 'admin_visible_student_enrollments'].scope).only(:where))
+        .merge(Course.instance_exec(&Course.reflections['admin_visible_student_enrollments'].scope).only(:where))
         .order("users.id") # this helps with preventing deadlock with other things that touch lots of users
         .uniq
         .to_a
@@ -1492,6 +1534,13 @@ class Assignment < ActiveRecord::Base
                                else
                                  []
                                end
+    users_with_vericite_data = if vericite_enabled?
+                                 submissions
+                                 .reject { |s| s.turnitin_data.blank? }
+                                 .map(&:user)
+                               else
+                                 []
+                               end
     # this only includes users with a submission who are unexcused
     users_who_arent_excused = submissions.reject(&:excused?).map(&:user)
 
@@ -1510,7 +1559,7 @@ class Assignment < ActiveRecord::Base
       candidate_students = visible_group_students if candidate_students.empty?
       candidate_students.sort_by! { |s| enrollment_priority[enrollment_state[s.id]] }
 
-      representative   = (candidate_students & users_with_turnitin_data).first
+      representative   = (candidate_students & (users_with_turnitin_data || users_with_vericite_data)).first
       representative ||= (candidate_students & users_with_submissions).first
       representative ||= candidate_students.first
       others = visible_group_students - [representative]
@@ -1870,6 +1919,14 @@ class Assignment < ActiveRecord::Base
 
   scope :unpublished, -> { where(:workflow_state => 'unpublished') }
   scope :published, -> { where(:workflow_state => 'published') }
+  scope :api_id, lambda { |api_id|
+    if api_id.start_with?('lti_context_id')
+      lti_context_id = api_id.split(':').last
+      find_by lti_context_id: lti_context_id
+    else
+      find api_id
+    end
+  }
 
   def overdue?
     due_at && due_at <= Time.zone.now
@@ -1940,8 +1997,10 @@ class Assignment < ActiveRecord::Base
   def submission_action_string
     if submission_types == "online_quiz"
       t :submission_action_take_quiz, "Take %{title}", :title => title
-    else
+    elsif graded? && expects_submission?
       t :submission_action_turn_in_assignment, "Turn in %{title}", :title => title
+    else
+      t "Complete %{title}", :title => title
     end
   end
 
@@ -2115,8 +2174,6 @@ class Assignment < ActiveRecord::Base
   end
 
   def due_for_any_student_in_closed_grading_period?(periods = nil)
-    return false unless self.due_date || self.has_active_overrides?
-
     periods ||= GradingPeriod.for(self.course)
     due_in_closed_period = !self.only_visible_to_overrides &&
       GradingPeriodHelper.date_in_closed_grading_period?(self.due_date, periods)

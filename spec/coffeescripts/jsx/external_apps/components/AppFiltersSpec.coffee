@@ -1,10 +1,11 @@
 define [
   'react'
+  'react-dom'
+  'react-addons-test-utils'
   'jsx/external_apps/lib/AppCenterStore'
   'jsx/external_apps/components/AppFilters'
-], (React, store, AppFilters) ->
+], (React, ReactDOM, TestUtils, store, AppFilters) ->
 
-  TestUtils = React.addons.TestUtils
   Simulate = TestUtils.Simulate
   wrapper = document.getElementById('fixtures')
 
@@ -15,7 +16,7 @@ define [
     React.createElement(AppFilters)
 
   renderComponent = ->
-    React.render(createElement(), wrapper)
+    ReactDOM.render(createElement(), wrapper)
 
   getDOMNodes = ->
     component = renderComponent()
@@ -113,7 +114,7 @@ define [
       store.setState({ apps: @apps })
     teardown: ->
       store.reset()
-      React.unmountComponentAtNode wrapper
+      ReactDOM.unmountComponentAtNode wrapper
 
   test 'renders', ->
     [ component, tabAll, tabNotInstalled, tabInstalled, filterText ] = getDOMNodes()

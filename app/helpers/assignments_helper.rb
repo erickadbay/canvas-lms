@@ -48,11 +48,8 @@ module AssignmentsHelper
       multiple_due_dates(assignment)
     else
       assignment = assignment.overridden_for(user)
-      if assignment.due_at
-        datetime_string(assignment.due_at)
-      else
-        I18n.t('No Due Date')
-      end
+      due_date = assignment.due_at || assignment.applied_overrides.map(&:due_at).compact.first
+      due_date ? datetime_string(due_date) : I18n.t('No Due Date')
     end
   end
 
@@ -78,6 +75,11 @@ module AssignmentsHelper
 
   def turnitin_active?
     @assignment.turnitin_enabled? && @context.turnitin_enabled? &&
+    !@assignment.submission_types.include?("none")
+  end
+
+  def vericite_active?
+    @assignment.vericite_enabled? && @context.vericite_enabled? &&
     !@assignment.submission_types.include?("none")
   end
 end

@@ -1,14 +1,12 @@
 define [
   'react'
   'react-dom'
+  'react-addons-test-utils'
   'underscore'
   'jsx/due_dates/DueDateTokenWrapper'
   'jsx/due_dates/OverrideStudentStore'
   'helpers/fakeENV'
-], (React, ReactDOM, _, DueDateTokenWrapper, OverrideStudentStore, fakeENV) ->
-
-  Simulate = React.addons.TestUtils.Simulate
-  SimulateNative = React.addons.TestUtils.SimulateNative
+], (React, ReactDOM, {Simulate, SimulateNative}, _, DueDateTokenWrapper, OverrideStudentStore, fakeENV) ->
 
   module 'DueDateTokenWrapper',
     setup: ->
@@ -16,9 +14,9 @@ define [
       @clock = sinon.useFakeTimers()
       @props =
         tokens: [
-          {name: "Atilla", student_id: "3", type: "student"},
-          {name: "Huns", course_section_id: "4", type: "section"},
-          {name: "Reading Group 3", group_id: "3", type: "group"}
+          {id: "1", name: "Atilla", student_id: "3", type: "student"},
+          {id: "2", name: "Huns", course_section_id: "4", type: "section"},
+          {id: "3", name: "Reading Group 3", group_id: "3", type: "group"}
         ]
         potentialOptions: [
           {course_section_id: "1", name: "Patricians"},
@@ -26,13 +24,15 @@ define [
           {id: "2", name: "Agrippa"},
           {id: "3", name: "Publius"},
           {id: "4", name: "Scipio"},
+          {id: "5", name: "Baz"},
           {course_section_id: "2", name: "Plebs | [ $"}, # named strangely to test regex
           {course_section_id: "3", name: "Foo"},
           {course_section_id: "4", name: "Bar"},
           {course_section_id: "5", name: "Baz"},
           {course_section_id: "6", name: "Qux"},
           {group_id: "1", name: "Reading Group One"},
-          {group_id: "2", name: "Reading Group Two"}
+          {group_id: "2", name: "Reading Group Two"},
+          {noop_id: "1", name: "Mastery Paths"}
         ]
         handleTokenAdd: ->
         handleTokenRemove: ->
@@ -40,6 +40,7 @@ define [
         allStudentsFetched: false
         currentlySearching: false
         rowKey: "nullnullnull"
+        disabled: false
 
       @mountPoint = $('<div>').appendTo('body')[0]
       DueDateTokenWrapperElement = React.createElement(DueDateTokenWrapper, @props)
@@ -69,8 +70,8 @@ define [
     # contend with.
     @DueDateTokenWrapper.removeTimingSafeties()
 
-    # 1 prompt, 3 sections, 4 students, 2 groups, 3 headers = 13
-    equal @DueDateTokenWrapper.optionsForMenu().length, 13
+    # 1 prompt, 3 sections, 4 students, 2 groups, 3 headers, 1 Noop = 14
+    equal @DueDateTokenWrapper.optionsForMenu().length, 14
 
     @DueDateTokenWrapper.handleInput("scipio")
     # 0 sections, 1 student, 1 header = 2
@@ -114,8 +115,41 @@ define [
     foundToken = @DueDateTokenWrapper.findMatchingOption("The Elder")
     equal foundToken["name"], "Seneca The Elder"
 
+  test 'findMatchingOption can match tokens by properties', ->
+    fakeOption = { props: { set_props: { name: "Baz", course_section_id: "5"} } }
+    foundToken = @DueDateTokenWrapper.findMatchingOption("Baz", fakeOption)
+    equal foundToken["course_section_id"], "5"
+
   test 'hidingValidMatches updates as matching tag number changes', ->
     ok @DueDateTokenWrapper.hidingValidMatches()
 
     @DueDateTokenWrapper.handleInput("scipio")
     ok !@DueDateTokenWrapper.hidingValidMatches()
+
+  test 'overrideTokenAriaLabel method', ->
+    equal @DueDateTokenWrapper.overrideTokenAriaLabel('group X'), "Currently assigned to group X, click to remove"
+
+  module 'disabled DueDateTokenWrapper',
+    setup: ->
+      fakeENV.setup(context_asset_string = "course_1")
+      props =
+        tokens: [{id: "1", name: "Atilla", student_id: "3", type: "student"}]
+        potentialOptions: [{course_section_id: "1", name: "Patricians"}]
+        handleTokenAdd: ->
+        handleTokenRemove: ->
+        defaultSectionNamer: ->
+        allStudentsFetched: false
+        currentlySearching: false
+        rowKey: "wat"
+        disabled: true
+
+      @mountPoint = $('<div>').appendTo('body')[0]
+      DueDateTokenWrapperElement = React.createElement(DueDateTokenWrapper, props)
+      @DueDateTokenWrapper = ReactDOM.render(DueDateTokenWrapperElement, @mountPoint)
+
+    teardown: ->
+      ReactDOM.unmountComponentAtNode(@mountPoint)
+      fakeENV.teardown()
+
+  test 'renders a readonly token input', ->
+    ok @DueDateTokenWrapper.refs.DisabledTokenInput

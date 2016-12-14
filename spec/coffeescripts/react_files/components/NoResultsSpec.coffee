@@ -1,9 +1,10 @@
 define [
   'react'
+  'react-dom'
+  'react-addons-test-utils'
   'jquery'
   'jsx/files/NoResults'
-], (React, $, NoResults) ->
-  TestUtils = React.addons.TestUtils
+], (React, ReactDOM, TestUtils, $, NoResults) ->
 
   module "NoResults"
 
@@ -14,4 +15,4 @@ define [
 
     equal rendered.refs.yourSearch.props.children, "Your search - \"#{search_term}\" - did not match any files.", "has the right text"
 
-    React.unmountComponentAtNode(rendered.getDOMNode().parentNode)
+    ReactDOM.unmountComponentAtNode(rendered.getDOMNode().parentNode)

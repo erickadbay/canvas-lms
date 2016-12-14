@@ -249,6 +249,10 @@ class DiscussionTopicsController < ApplicationController
   #
   # Returns the paginated list of discussion topics for this course or group.
   #
+  # @argument include[] [String, "all_dates"]
+  #   If "all_dates" is passed, all dates associated with graded discussions'
+  #   assignments will be included.
+  #
   # @argument order_by [String, "position"|"recent_activity"]
   #   Determines the order of the discussion topic list. Defaults to "position".
   #
@@ -264,12 +268,18 @@ class DiscussionTopicsController < ApplicationController
   # @argument search_term [String]
   #   The partial title of the discussion topics to match and return.
   #
+  # @argument exclude_context_module_locked_topics [Boolean]
+  #   For students, exclude topics that are locked by module progression.
+  #   Defaults to false.
+  #
   # @example_request
   #     curl https://<canvas>/api/v1/courses/<course_id>/discussion_topics \
   #          -H 'Authorization: Bearer <token>'
   #
   # @returns [DiscussionTopic]
   def index
+    include_params = Array(params[:include])
+
     if params[:only_announcements]
       return unless authorized_action(@context.announcements.temp_record, @current_user, :read)
     else
@@ -317,6 +327,10 @@ class DiscussionTopicsController < ApplicationController
 
     @topics = Api.paginate(scope, self, topic_pagination_url)
 
+    if params[:exclude_context_module_locked_topics]
+      @topics = DiscussionTopic.reject_context_module_locked_topics(@topics, @current_user)
+    end
+
     if states.present?
       @topics.reject! { |t| t.locked_for?(@current_user) } if states.include?('unlocked')
       @topics.select! { |t| t.locked_for?(@current_user) } if states.include?('locked')
@@ -349,7 +363,7 @@ class DiscussionTopicsController < ApplicationController
                 },
                 :discussion_topic_menu_tools => external_tools_display_hashes(:discussion_topic_menu)
         }
-        conditional_release_js_env
+        conditional_release_js_env(includes: :active_rules)
         append_sis_data(hash)
         js_env(hash)
 
@@ -359,9 +373,10 @@ class DiscussionTopicsController < ApplicationController
       end
       format.json do
         render json: discussion_topics_api_json(@topics, @context, @current_user, session,
-          :user_can_moderate => user_can_moderate,
-          :plain_messages => value_to_boolean(params[:plain_messages]),
-          :exclude_assignment_description => value_to_boolean(params[:exclude_assignment_descriptions]))
+          user_can_moderate: user_can_moderate,
+          plain_messages: value_to_boolean(params[:plain_messages]),
+          exclude_assignment_description: value_to_boolean(params[:exclude_assignment_descriptions]),
+          include_all_dates: include_params.include?('all_dates'))
       end
     end
   end
@@ -419,13 +434,15 @@ class DiscussionTopicsController < ApplicationController
 
       sections = @context.respond_to?(:course_sections) ? @context.course_sections.active : []
 
-      js_hash = {DISCUSSION_TOPIC: hash,
-                 SECTION_LIST: sections.map { |section| { id: section.id, name: section.name } },
-                 GROUP_CATEGORIES: categories.
-                     reject { |category| category.student_organized? }.
-                     map { |category| { id: category.id, name: category.name } },
-                 CONTEXT_ID: @context.id,
-                 CONTEXT_ACTION_SOURCE: :discussion_topic
+      js_hash = {
+        CONTEXT_ACTION_SOURCE: :discussion_topic,
+        CONTEXT_ID: @context.id,
+        DISCUSSION_TOPIC: hash,
+        GROUP_CATEGORIES: categories.
+           reject(&:student_organized?).
+           map { |category| { id: category.id, name: category.name } },
+        MULTIPLE_GRADING_PERIODS_ENABLED: @context.feature_enabled?(:multiple_grading_periods),
+        SECTION_LIST: sections.map { |section| { id: section.id, name: section.name } }
       }
 
       post_to_sis = Assignment.sis_grade_export_enabled?(@context)
@@ -444,8 +461,14 @@ class DiscussionTopicsController < ApplicationController
         }
         js_hash['VALID_DATE_RANGE'] = CourseDateRange.new(@context)
       end
-      js_hash[:CANCEL_REDIRECT_URL] = cancel_redirect_url
+      js_hash[:CANCEL_TO] = cancel_redirect_url
       append_sis_data(js_hash)
+
+      if @context.feature_enabled?(:multiple_grading_periods)
+        gp_context = @context.is_a?(Group) ? @context.context : @context
+        js_hash[:active_grading_periods] = GradingPeriod.json_for(gp_context, @current_user)
+      end
+
       js_env(js_hash)
 
       conditional_release_js_env(@topic.assignment)
@@ -588,7 +611,7 @@ class DiscussionTopicsController < ApplicationController
             js_hash[:CONTEXT_ACTION_SOURCE] = :discussion_topic
             append_sis_data(js_hash)
             js_env(js_hash)
-            conditional_release_js_env(@topic.assignment, include_rule: true)
+            conditional_release_js_env(@topic.assignment, includes: [:rule])
           end
         end
       end
@@ -921,7 +944,7 @@ class DiscussionTopicsController < ApplicationController
         apply_positioning_parameters
         apply_attachment_parameters
         unless @topic.root_topic_id?
-          apply_assignment_parameters(params[:assignment], @topic)
+          apply_assignment_parameters(strong_params[:assignment], @topic)
         end
 
         if publish_later

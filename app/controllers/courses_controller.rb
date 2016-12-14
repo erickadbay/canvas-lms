@@ -829,9 +829,9 @@ class CoursesController < ApplicationController
   #   - "custom_links": Optionally include plugin-supplied custom links for each student,
   #   such as analytics information
   # @argument user_id [String]
-  #   If included, the user will be queried and if the user is part of the
-  #   users set, the page parameter will be modified so that the page
-  #   containing user_id will be returned.
+  #   If this parameter is given and it corresponds to a user in the course,
+  #   the +page+ parameter will be ignored and the page containing the specified user
+  #   will be returned instead.
   #
   # @argument user_ids[] [Integer]
   #   If included, the course users set will only include users with IDs
@@ -877,7 +877,11 @@ class CoursesController < ApplicationController
 
       users = Api.paginate(users, self, api_v1_course_users_url)
       includes = Array(params[:include])
-      user_json_preloads(users, includes.include?('email'))
+      user_json_preloads(
+        users,
+        includes.include?('email'),
+        group_memberships: includes.include?('group_ids')
+      )
       unless includes.include?('test_student') || Array(params[:enrollment_type]).include?("student_view")
         users.reject! do |u|
           u.preferences[:fake_student]
@@ -1129,6 +1133,7 @@ class CoursesController < ApplicationController
 
       @alerts = @context.alerts
       add_crumb(t('#crumbs.settings', "Settings"), named_context_url(@context, :context_details_url))
+
       js_env({
         COURSE_ID: @context.id,
         USERS_URL: "/api/v1/courses/#{@context.id}/users",
@@ -1141,6 +1146,7 @@ class CoursesController < ApplicationController
           :manage_students => @context.grants_right?(@current_user, session, :manage_students),
           :manage_admin_users => @context.grants_right?(@current_user, session, :manage_admin_users),
           :manage_account_settings => @context.account.grants_right?(@current_user, session, :manage_account_settings),
+          :create_tool_manually => @context.grants_right?(@current_user, session, :create_tool_manually),
         },
         APP_CENTER: {
           enabled: Canvas::Plugin.find(:app_center).enabled?
@@ -1372,7 +1378,7 @@ class CoursesController < ApplicationController
       success = false
       if enrollment.invited?
         success = enrollment.accept!
-        flash[:notice] = message || t('notices.invitation_accepted', "Invitation accepted!  Welcome to %{course}!", :course => @context.name)
+        flash[:notice] = t('notices.invitation_accepted', "Invitation accepted!  Welcome to %{course}!", :course => @context.name)
       end
 
       if session[:enrollment_uuid] == session[:accepted_enrollment_uuid]
@@ -1612,7 +1618,7 @@ class CoursesController < ApplicationController
         add_crumb(t('#crumbs.assignments', "Assignments"))
         set_js_assignment_data
         js_env(:COURSE_HOME => true)
-        get_sorted_assignments
+        @upcoming_assignments = get_upcoming_assignments(@context)
       when 'modules'
         add_crumb(t('#crumbs.modules', "Modules"))
         load_modules
@@ -1631,8 +1637,9 @@ class CoursesController < ApplicationController
         else
           @contexts += @user_groups if @user_groups
         end
-        @current_conferences = @context.web_conferences.select{|c| c.active?(false, false) && c.users.include?(@current_user) }
-        @scheduled_conferences = @context.web_conferences.select{|c| c.scheduled? && c.users.include?(@current_user)}
+        web_conferences = @context.web_conferences.active.to_a
+        @current_conferences = web_conferences.select{|c| c.active?(false, false) && c.users.include?(@current_user) }
+        @scheduled_conferences = web_conferences.select{|c| c.scheduled? && c.users.include?(@current_user)}
         @stream_items = @current_user.try(:cached_recent_stream_items, { :contexts => @contexts }) || []
       end
 
@@ -1795,11 +1802,17 @@ class CoursesController < ApplicationController
       limit_privileges = value_to_boolean(enrollment_options[:limit_privileges_to_course_section])
       enrollment_options[:limit_privileges_to_course_section] = limit_privileges
       enrollment_options[:role] = custom_role if custom_role
-      list = UserList.new(params[:user_list],
+
+      list =
+        if params[:user_ids]
+          Array(params[:user_ids])
+        else
+          UserList.new(params[:user_list],
                           root_account: @context.root_account,
                           search_method: @context.user_list_search_mode_for(@current_user),
                           initial_type: params[:enrollment_type],
                           current_user: @current_user)
+        end
       if !@context.concluded? && (@enrollments = EnrollmentsFromUserList.process(list, @context, enrollment_options))
         ActiveRecord::Associations::Preloader.new.preload(@enrollments, [:course_section, {:user => [:communication_channel, :pseudonym]}])
         json = @enrollments.map { |e|
@@ -2119,12 +2132,6 @@ class CoursesController < ApplicationController
         if account && account != @course.account && account.grants_right?(@current_user, session, :manage_courses)
           @course.account = account
         end
-      end
-
-      root_account_id = params[:course].delete :root_account_id
-      if root_account_id && Account.site_admin.grants_right?(@current_user, session, :manage_courses)
-        @course.root_account = Account.root_accounts.find(root_account_id)
-        @course.account = @course.root_account if @course.account.root_account != @course.root_account
       end
 
       if params[:course].key?(:apply_assignment_group_weights)
@@ -2670,7 +2677,7 @@ class CoursesController < ApplicationController
 
   def can_change_group_weighting_scheme?
     return true unless @course.feature_enabled?(:multiple_grading_periods)
-    return true if @current_user.admin_of_root_account?(@course.root_account)
+    return true if @course.account_membership_allows(@current_user)
     periods = GradingPeriod.for(@course)
     @course.active_assignments.preload(:active_assignment_overrides).none? do |assignment|
       assignment.due_for_any_student_in_closed_grading_period?(periods)

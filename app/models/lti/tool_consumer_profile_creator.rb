@@ -17,6 +17,7 @@ module Lti
           Canvas.placements.assignmentSelection
           Canvas.placements.linkSelection
           Canvas.placements.postGrades
+          Canvas.placements.assignmentConfiguration
           User.username
           Person.email.primary
           Person.name.given
@@ -27,6 +28,7 @@ module Lti
           Membership.role
           ToolConsumerProfile.url
           OAuth.splitSecret
+          Context.id
         ).freeze
 
     SERVICES = [

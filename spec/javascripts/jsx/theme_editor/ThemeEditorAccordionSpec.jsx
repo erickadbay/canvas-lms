@@ -1,11 +1,13 @@
 define([
   'react',
+  'react-dom',
+  'react-addons-test-utils',
   'jquery',
   'jsx/theme_editor/ThemeEditorAccordion',
   'jsx/theme_editor/RangeInput',
   'jsx/theme_editor/ThemeEditorColorRow',
   'jsx/theme_editor/ThemeEditorImageRow',
-], (React, jQuery, ThemeEditorAccordion, RangeInput, ColorRow, ImageRow) => {
+], (React, ReactDOM, TestUtils, jQuery, ThemeEditorAccordion, RangeInput, ColorRow, ImageRow) => {
 
   let elem, props
 
@@ -24,7 +26,7 @@ define([
 
   test('Initializes jQuery accordion', () => {
     sinon.spy(jQuery.fn, 'accordion')
-    const component = React.render(<ThemeEditorAccordion {...props} />, elem)
+    const component = ReactDOM.render(<ThemeEditorAccordion {...props} />, elem)
     ok(
       jQuery(jQuery.fn.accordion.calledOn(component.getDOMNode())),
       'called jquery accordion plugin on dom node'
@@ -98,7 +100,7 @@ define([
       props.changedValues = {
         foo: {val: 'baz'}
       }
-      const component = React.render(<ThemeEditorAccordion {...props} />, elem)
+      const component = ReactDOM.render(<ThemeEditorAccordion {...props} />, elem)
       const varDef = props.variableSchema[0].variables[0]
       const expectedDisplayValue = 'display value'
       props.getDisplayValue.returns(expectedDisplayValue)
@@ -152,7 +154,7 @@ define([
     props.changedValues = {
       foo: {val: 0.3}
     }
-    const component = React.render(<ThemeEditorAccordion {...props} />, elem)
+    const component = ReactDOM.render(<ThemeEditorAccordion {...props} />, elem)
     const varDef = props.variableSchema[0].variables[0]
     const expectedDisplayValue = 'display value'
     props.getDisplayValue.returns(expectedDisplayValue)
@@ -193,7 +195,7 @@ define([
       group_name: 'Bar',
       variables: []
     }]
-    const component = React.render(<ThemeEditorAccordion {...props} />, elem)
+    const component = ReactDOM.render(<ThemeEditorAccordion {...props} />, elem)
     const node = component.getDOMNode()
     const headings = node.querySelectorAll('.Theme__editor-accordion > h3')
     props.variableSchema.forEach((group, index) => {
@@ -221,7 +223,7 @@ define([
         accept: 'image/*'
       }]
     }]
-    const shallowRenderer = React.addons.TestUtils.createRenderer()
+    const shallowRenderer = TestUtils.createRenderer()
     shallowRenderer.render(<ThemeEditorAccordion {...props} />)
     const vdom = shallowRenderer.getRenderOutput()
     const rows = vdom.props.children[0][1].props.children

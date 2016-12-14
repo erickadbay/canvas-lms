@@ -311,6 +311,9 @@ describe AssignmentGroupsController do
         Factories::GradingPeriodHelper.new.create_for_group(group, {
           start_date: 2.weeks.ago, end_date: 2.days.ago, close_date: 1.day.ago
         })
+        Factories::GradingPeriodHelper.new.create_for_group(group, {
+          start_date: 2.days.ago, end_date: 2.days.from_now, close_date: 3.days.from_now
+        })
         @assignment1.update_attributes(due_at: 1.week.ago)
       end
 
@@ -396,13 +399,13 @@ describe AssignmentGroupsController do
     end
 
     it 'requires authorization' do
-      post 'create', :course_id => @course.id
+      post 'create', :course_id => @course.id, :assignment_group => {:name => 'some test group'}
       assert_unauthorized
     end
 
     it 'does not allow students to create' do
       user_session(@student)
-      post 'create', :course_id => @course.id
+      post 'create', :course_id => @course.id, :assignment_group => {:name => 'some test group'}
       assert_unauthorized
     end
 
